@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Car Analytics</title>
+<script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f0f; color: #e0e0e0; }
+  header { padding: 24px 32px 16px; border-bottom: 1px solid #222; }
+  header h1 { font-size: 1.4rem; font-weight: 600; color: #fff; }
+  header p { font-size: 0.8rem; color: #666; margin-top: 4px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 24px 32px; }
+  .card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 16px; }
+  .card .label { font-size: 0.7rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .card .value { font-size: 1.5rem; font-weight: 600; color: #fff; }
+  .card .sub { font-size: 0.75rem; color: #666; margin-top: 2px; }
+  .charts { padding: 0 24px 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .chart-box { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 8px; }
+  .chart-box.full { grid-column: 1 / -1; }
+  h2 { padding: 16px 32px 8px; font-size: 0.85rem; color: #888; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+  .services-table { margin: 0 32px 32px; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px; overflow: hidden; }
+  .services-table table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+  .services-table th { background: #222; padding: 10px 16px; text-align: left; color: #888; font-weight: 500; font-size: 0.75rem; text-transform: uppercase; }
+  .services-table td { padding: 10px 16px; border-top: 1px solid #222; color: #ccc; }
+  .services-table tr:hover td { background: #202020; }
+  #loading { text-align: center; padding: 80px; color: #666; }
+  @media (max-width: 700px) { .charts { grid-template-columns: 1fr; } .chart-box.full { grid-column: 1; } }
+</style>
+</head>
+<body>
+<div id="loading">Loading dashboard data...</div>
+<div id="app" style="display:none">
+  <header>
+    <h1>Car Analytics</h1>
+    <p id="date-range"></p>
+  </header>
+
+  <div class="cards" id="cards"></div>
+
+  <h2>Fuel Efficiency</h2>
+  <div class="charts">
+    <div class="chart-box full" id="chart-mpg"></div>
+    <div class="chart-box" id="chart-monthly-cost"></div>
+    <div class="chart-box" id="chart-fuel-price"></div>
+    <div class="chart-box" id="chart-fuel-split"></div>
+    <div class="chart-box" id="chart-yearly"></div>
+  </div>
+
+  <h2>Service &amp; Expense History</h2>
+  <div class="services-table">
+    <table id="services-table">
+      <thead><tr><th>Date</th><th>Odometer</th><th>Type</th><th>Cost</th><th>Notes</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+const PLOTLY_LAYOUT = (title) => ({
+  title: { text: title, font: { size: 13, color: '#aaa' }, x: 0.02 },
+  paper_bgcolor: 'transparent',
+  plot_bgcolor: 'transparent',
+  font: { color: '#aaa', size: 11 },
+  margin: { t: 40, b: 50, l: 55, r: 20 },
+  xaxis: { gridcolor: '#222', linecolor: '#333', zerolinecolor: '#333' },
+  yaxis: { gridcolor: '#222', linecolor: '#333', zerolinecolor: '#333' },
+  showlegend: false,
+});
+
+const PLOTLY_CONFIG = { displayModeBar: false, responsive: true };
+
+const fmt = {
+  usd: (v) => v != null ? `$${v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—',
+  mpg: (v) => v != null ? `${v.toFixed(1)} mpg` : '—',
+  miles: (v) => v != null ? `${Math.round(v).toLocaleString()} mi` : '—',
+  days: (v) => v != null ? `${v} days` : '—',
+};
+
+async function load() {
+  const res = await fetch(`dashboard-data.json?t=${Date.now()}`);
+  const d = await res.json();
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('date-range').textContent =
+    `${d.summary.date_range_start} → ${d.summary.date_range_end} · updated ${d.summary.generated_at.slice(0,10)}`;
+
+  // ── Summary cards ────────────────────────────────────────────────────────
+  const cards = [
+    { label: 'Total Fuel Cost', value: fmt.usd(d.summary.total_fuel_cost_usd), sub: `${d.summary.total_fills} fill-ups` },
+    { label: 'Total Miles', value: fmt.miles(d.summary.total_miles_driven), sub: `${d.summary.odometer_start?.toLocaleString()} → ${d.summary.odometer_end?.toLocaleString()} mi` },
+    { label: 'Avg Fuel Economy', value: fmt.mpg(d.summary.avg_mpg), sub: 'lifetime average' },
+    { label: 'Cost Per Mile', value: d.summary.avg_cost_per_mile_usd != null ? `$${d.summary.avg_cost_per_mile_usd.toFixed(3)}/mi` : '—', sub: 'fuel only' },
+    { label: 'Total Services', value: fmt.usd(d.summary.total_service_cost_usd), sub: `${d.services.length} service visits` },
+    { label: 'Total Car Cost', value: fmt.usd(d.summary.total_cost_usd), sub: 'fuel + service + expenses' },
+    { label: 'Fill-up Frequency', value: fmt.days(d.summary.avg_days_between_fills), sub: 'avg between fills' },
+  ];
+  document.getElementById('cards').innerHTML = cards.map(c =>
+    `<div class="card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`
+  ).join('');
+
+  // ── MPG over time (with rolling avg) ─────────────────────────────────────
+  const fillsWithMpg = d.fills.filter(f => f.mpg);
+  Plotly.newPlot('chart-mpg', [
+    {
+      x: fillsWithMpg.map(f => f.date),
+      y: fillsWithMpg.map(f => f.mpg),
+      mode: 'markers',
+      marker: { color: '#444', size: 5 },
+      name: 'Per fill-up',
+      hovertemplate: '%{x}<br>%{y:.1f} mpg<extra></extra>',
+    },
+    {
+      x: fillsWithMpg.map(f => f.date),
+      y: fillsWithMpg.map(f => f.mpg_rolling5),
+      mode: 'lines',
+      line: { color: '#4da6ff', width: 2 },
+      name: '5-fill rolling avg',
+      hovertemplate: '%{x}<br>%{y:.1f} mpg (avg)<extra></extra>',
+    },
+  ], {
+    ...PLOTLY_LAYOUT('Fuel Economy (mpg)'),
+    showlegend: true,
+    legend: { x: 0.02, y: 0.98, font: { color: '#888', size: 10 }, bgcolor: 'transparent' },
+    yaxis: { ...PLOTLY_LAYOUT().yaxis, title: 'mpg' },
+  }, PLOTLY_CONFIG);
+
+  // ── Monthly fuel cost ─────────────────────────────────────────────────────
+  Plotly.newPlot('chart-monthly-cost', [{
+    x: d.monthly.map(m => m.month),
+    y: d.monthly.map(m => m.cost),
+    type: 'bar',
+    marker: { color: '#2a6496' },
+    hovertemplate: '%{x}<br>$%{y:.2f}<extra></extra>',
+  }], {
+    ...PLOTLY_LAYOUT('Monthly Fuel Spend ($)'),
+    yaxis: { ...PLOTLY_LAYOUT().yaxis, title: 'USD' },
+  }, PLOTLY_CONFIG);
+
+  // ── Fuel price trend ──────────────────────────────────────────────────────
+  const fillsWithPrice = d.fills.filter(f => f.price_per_gal);
+  Plotly.newPlot('chart-fuel-price', [{
+    x: fillsWithPrice.map(f => f.date),
+    y: fillsWithPrice.map(f => f.price_per_gal),
+    mode: 'lines+markers',
+    line: { color: '#e8a838', width: 1.5 },
+    marker: { color: '#e8a838', size: 4 },
+    hovertemplate: '%{x}<br>$%{y:.3f}/gal<extra></extra>',
+  }], {
+    ...PLOTLY_LAYOUT('Gas Price ($/gal)'),
+    yaxis: { ...PLOTLY_LAYOUT().yaxis, title: '$/gal' },
+  }, PLOTLY_CONFIG);
+
+  // ── Fuel type split ───────────────────────────────────────────────────────
+  Plotly.newPlot('chart-fuel-split', [{
+    labels: d.fuel_split.map(f => f.fuel_type),
+    values: d.fuel_split.map(f => f.cost),
+    type: 'pie',
+    marker: { colors: ['#4da6ff', '#e8a838', '#5cb85c'] },
+    textinfo: 'label+percent',
+    hovertemplate: '%{label}<br>$%{value:.2f}<br>%{percent}<extra></extra>',
+  }], {
+    ...PLOTLY_LAYOUT('Fuel Cost by Type'),
+    margin: { t: 40, b: 20, l: 20, r: 20 },
+  }, PLOTLY_CONFIG);
+
+  // ── Yearly cost ───────────────────────────────────────────────────────────
+  Plotly.newPlot('chart-yearly', [{
+    x: d.yearly.map(y => y.year),
+    y: d.yearly.map(y => y.cost),
+    type: 'bar',
+    marker: { color: '#5cb85c' },
+    hovertemplate: '%{x}<br>$%{y:,.2f}<extra></extra>',
+    text: d.yearly.map(y => `$${Math.round(y.cost).toLocaleString()}`),
+    textposition: 'outside',
+    textfont: { color: '#888', size: 10 },
+  }], {
+    ...PLOTLY_LAYOUT('Annual Fuel Spend ($)'),
+    yaxis: { ...PLOTLY_LAYOUT().yaxis, title: 'USD' },
+  }, PLOTLY_CONFIG);
+
+  // ── Services + expenses table ─────────────────────────────────────────────
+  const allEvents = [
+    ...d.services.map(s => ({ ...s, category: 'Service' })),
+    ...d.expenses.map(e => ({ ...e, category: 'Expense' })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+
+  const tbody = document.querySelector('#services-table tbody');
+  tbody.innerHTML = allEvents.map(e => `
+    <tr>
+      <td>${e.date}</td>
+      <td>${e.odometer ? e.odometer.toLocaleString() + ' mi' : '—'}</td>
+      <td>${e.types ? e.types.join(', ') : e.category}</td>
+      <td>$${e.total_cost.toFixed(2)}</td>
+      <td style="color:#666;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.notes || ''}</td>
+    </tr>
+  `).join('');
+}
+
+load().catch(err => {
+  document.getElementById('loading').textContent = 'Error loading data: ' + err.message;
+});
+</script>
+</body>
+</html>
