@@ -27,7 +27,7 @@
   .photo-btn .label { font-size: 0.72rem; color: #888; text-align: center; padding: 0 8px; }
   .photo-btn img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 10px; }
   .photo-btn.has-photo { border-style: solid; border-color: #2a6496; }
-  .photo-btn .check { position: absolute; top: 6px; right: 6px; background: #2a6496; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; display: none; }
+  .photo-btn .check { position: absolute; top: 6px; right: 6px; background: #2a6496; border-radius: 50%; width: 20px; height: 20px; align-items: center; justify-content: center; font-size: 0.7rem; display: none; }
   .photo-btn.has-photo .check { display: flex; }
 
   /* Buttons */
@@ -251,7 +251,7 @@ async function parse() {
   try {
     const key = localStorage.getItem('cm_anth_key');
     const body = {
-      model: 'claude-opus-4-5',
+      model: 'claude-opus-4-6',
       max_tokens: 512,
       system: `You parse fuel pump display photos and odometer photos to extract refueling data.
 Return ONLY valid JSON with these exact keys:
@@ -260,7 +260,7 @@ Return ONLY valid JSON with these exact keys:
   "gallons": <number, fuel volume dispensed>,
   "price_per_gal": <number, price per gallon>,
   "total_usd": <number, total dollar amount paid>,
-  "fuel_type": <"Gasoline" | "Gas Premium" | "Diesel">,
+  "fuel_type": <"Gasoline" | "Gas Premium" | "Diesel" | "Electric">,
   "full_tank": <true | false, true if pump stopped at full>
 }
 If a value cannot be read from the images, use null. Do not include any text outside the JSON object.`,
@@ -441,7 +441,9 @@ async function loadLastOdo() {
     const data = JSON.parse(atob(fileData.content.replace(/\n/g, '')));
     const fills = (data.refuelings || []).filter(f => f.odometro).sort((a, b) => a.odometro - b.odometro);
     if (fills.length) lastOdo = fills[fills.length - 1].odometro;
-  } catch {}
+  } catch (e) {
+    console.error('loadLastOdo failed:', e);
+  }
 }
 
 function reset() {
