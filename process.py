@@ -18,7 +18,7 @@ def parse_date(s):
     if not s:
         return None
     try:
-        return datetime.strptime(s[:19], "%Y-%m-%d %H:%M:%S")
+        return datetime.strptime(s[:10], "%Y-%m-%d")
     except Exception:
         return None
 

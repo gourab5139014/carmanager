@@ -13,7 +13,7 @@
     "avg_days_between_fills": 9.1,
     "date_range_start": "2021-10-25",
     "date_range_end": "2026-03-24",
-    "generated_at": "2026-04-08T04:23:09Z"
+    "generated_at": "2026-04-08T04:39:10Z"
   },
   "fills": [
     {
@@ -2784,7 +2784,7 @@
       "types": [
         "Car Insurance"
       ],
-      "location": "76",
+      "location": "",
       "notes": "Car Insurance expense. There was no other way to track this."
     },
     {
@@ -2798,7 +2798,7 @@
         "Oil Change",
         "Oil Filter"
       ],
-      "location": "76",
+      "location": "",
       "notes": ""
     },
     {
@@ -2821,7 +2821,7 @@
         "Windshield Wipers",
         "tire protection policy"
       ],
-      "location": "Mission Tires",
+      "location": "",
       "notes": ""
     },
     {
@@ -2831,7 +2831,7 @@
       "types": [
         "External Bluetooth TPMS"
       ],
-      "location": "Amazon",
+      "location": "",
       "notes": ""
     },
     {
@@ -2852,7 +2852,7 @@
         "Oil Change"
       ],
       "location": "",
-      "notes": "See noe Valley auto works file for breakdown"
+      "notes": "See [shop] file for breakdown"
     },
     {
       "date": "2023-12-30",
@@ -2861,8 +2861,8 @@
       "types": [
         "New Tires"
       ],
-      "location": "American Tires Paso Robles",
-      "notes": "Bought a 2022 tire to replace the spare. American Tires Paso Robles"
+      "location": "",
+      "notes": "Bought a 2022 tire to replace the spare. [shop]"
     },
     {
       "date": "2024-03-02",
@@ -2883,7 +2883,7 @@
         "Brake Pad",
         "Brake Replacement"
       ],
-      "location": "Noe Valley Auto Works",
+      "location": "",
       "notes": "1 brake pad set - $125\n2 brake rotors $218"
     },
     {
@@ -2893,7 +2893,7 @@
       "types": [
         "window repair"
       ],
-      "location": "JT's Auto",
+      "location": "",
       "notes": "Labor charge for looking at malfunctioning window rolling mechanism on front driver side window. The glass was jamming while rolling up and down."
     },
     {
@@ -2905,7 +2905,7 @@
         "Oil Change",
         "Oil Filter"
       ],
-      "location": "Jiffy Lube Geary",
+      "location": "",
       "notes": null
     },
     {
@@ -2950,8 +2950,8 @@
       "types": [
         "A/C Compressor Replacement"
       ],
-      "location": "76",
-      "notes": "Invoice #139477. Parts: A/C Compressor $764, R134 Freon $57.76, PAG Oil $10, R134 Freon & PAG Oil $40. Labor: A/C Service (recover/vacuum/recharge R134) $100, Replace A/C Compressor $400. Subtotal $1371.76 + Tax $75.19."
+      "location": "",
+      "notes": "Parts: A/C Compressor $764.00, R134 Freon $57.76, PAG Oil W/Dye $10.00, R134 Freon & PAG Oil $40.00. Labor: A/C service (recover/vacuum/recharge R134) $100.00, Replace A/C compressor $400.00. Subtotal $1,371.76 + tax $75.19."
     }
   ],
   "expenses": [
