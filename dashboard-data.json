@@ -2,9 +2,9 @@
   "summary": {
     "total_fills": 179,
     "total_fuel_cost_usd": 9857.99,
-    "total_service_cost_usd": 4295.36,
+    "total_service_cost_usd": 5742.31,
     "total_expense_cost_usd": 9985.0,
-    "total_cost_usd": 24138.35,
+    "total_cost_usd": 25585.3,
     "total_miles_driven": 45970,
     "odometer_start": 174000,
     "odometer_end": 219970,
@@ -13,7 +13,7 @@
     "avg_days_between_fills": 9.1,
     "date_range_start": "2021-10-25",
     "date_range_end": "2026-03-24",
-    "generated_at": "2026-04-07T05:13:04Z"
+    "generated_at": "2026-04-08T04:18:02Z"
   },
   "fills": [
     {
@@ -2942,6 +2942,16 @@
       ],
       "location": "",
       "notes": null
+    },
+    {
+      "date": "2026-04-03",
+      "odometer": 220149,
+      "total_cost": 1446.95,
+      "types": [
+        "A/C Compressor Replacement"
+      ],
+      "location": "76",
+      "notes": "Invoice #139477. Parts: A/C Compressor $764, R134 Freon $57.76, PAG Oil $10, R134 Freon & PAG Oil $40. Labor: A/C Service (recover/vacuum/recharge R134) $100, Replace A/C Compressor $400. Subtotal $1371.76 + Tax $75.19."
     }
   ],
   "expenses": [

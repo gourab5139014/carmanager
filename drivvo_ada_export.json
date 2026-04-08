@@ -12973,6 +12973,38 @@
       ],
       "data_acao": "2025-11-05 05:50:14",
       "acao": "I"
+    },
+    {
+      "id_servico": 99001001,
+      "id_unico": "00983744-5f13-444a-b1b7-5e4c22c36df8",
+      "id_veiculo": 4775575,
+      "id_usuario_acao": 3067089,
+      "id_local": 2135394,
+      "local": {
+        "id_local": 2135394,
+        "nome": "76",
+        "endereco": "1700 Noriega St, San Francisco, CA 94122, USA",
+        "latitude": 37.7542164,
+        "longitude": -122.4821707
+      },
+      "id_forma_pagamento": null,
+      "forma_pagamento": null,
+      "motorista": null,
+      "arquivos": [],
+      "odometro": 220149,
+      "data": "2026-04-03 00:00:00",
+      "observacao": "Invoice #139477. Parts: A/C Compressor $764, R134 Freon $57.76, PAG Oil $10, R134 Freon & PAG Oil $40. Labor: A/C Service (recover/vacuum/recharge R134) $100, Replace A/C Compressor $400. Subtotal $1371.76 + Tax $75.19.",
+      "tipos_servico": [
+        {
+          "id_servico_tipo_servico": 99001101,
+          "id_unico": "4ba0ae1a-53ac-4807-bf0d-17d024ed021d",
+          "id_tipo_servico": 99001201,
+          "valor": 1446.95,
+          "nome": "A/C Compressor Replacement"
+        }
+      ],
+      "data_acao": "2026-04-07 00:00:00",
+      "acao": "I"
     }
   ],
   "expenses": [
