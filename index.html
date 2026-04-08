@@ -17,8 +17,8 @@
   .card .value { font-size: 1.5rem; font-weight: 600; color: #fff; }
   .card .sub { font-size: 0.75rem; color: #666; margin-top: 2px; }
   .charts { padding: 0 24px 32px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .chart-box { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 8px; }
-  .chart-box.full { grid-column: 1 / -1; }
+  .chart-box { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 8px; height: 320px; }
+  .chart-box.full { grid-column: 1 / -1; height: 380px; }
   h2 { padding: 16px 32px 8px; font-size: 0.85rem; color: #888; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
   .services-table { margin: 0 32px 32px; background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px; overflow: hidden; }
   .services-table table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
@@ -63,13 +63,15 @@ const PLOTLY_LAYOUT = (title) => ({
   paper_bgcolor: 'transparent',
   plot_bgcolor: 'transparent',
   font: { color: '#aaa', size: 11 },
+  height: undefined,
+  autosize: true,
   margin: { t: 40, b: 50, l: 55, r: 20 },
   xaxis: { gridcolor: '#222', linecolor: '#333', zerolinecolor: '#333' },
   yaxis: { gridcolor: '#222', linecolor: '#333', zerolinecolor: '#333' },
   showlegend: false,
 });
 
-const PLOTLY_CONFIG = { displayModeBar: false, responsive: true };
+const PLOTLY_CONFIG = { displayModeBar: false, responsive: true, useResizeHandler: true };
 
 const fmt = {
   usd: (v) => v != null ? `$${v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '—',
