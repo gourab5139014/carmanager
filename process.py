@@ -70,11 +70,20 @@ def main():
         f["mpg"] = mpg
         f["cost_per_mile"] = cost_per_mile
 
-    # Rolling 5-fill average mpg
+    # Rolling p95 mpg over a 20-fill window.
+    # P95 with window=20 excludes the top ~1 outlier per window, making it
+    # robust to missed-fill spikes (which inflate MPG by doubling distance).
+    # Window of 5 would make p95 ≈ max, amplifying spikes rather than dampening them.
     mpg_values = [f["mpg"] for f in fills]
     for i, f in enumerate(fills):
-        window = [v for v in mpg_values[max(0, i - 4):i + 1] if v is not None]
-        f["mpg_rolling5"] = round(sum(window) / len(window), 2) if window else None
+        window = sorted([v for v in mpg_values[max(0, i - 19):i + 1] if v is not None])
+        if not window:
+            f["mpg_p95"] = None
+        else:
+            idx = (len(window) - 1) * 0.95
+            lo, hi = int(idx), min(int(idx) + 1, len(window) - 1)
+            p95 = window[lo] + (window[hi] - window[lo]) * (idx - lo)
+            f["mpg_p95"] = round(p95, 2)
 
     # ── Monthly aggregates ────────────────────────────────────────────────────
     monthly = defaultdict(lambda: {"cost": 0.0, "volume_gal": 0.0, "fills": 0, "miles": 0.0})

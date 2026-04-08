@@ -116,11 +116,11 @@ async function load() {
     },
     {
       x: fillsWithMpg.map(f => f.date),
-      y: fillsWithMpg.map(f => f.mpg_rolling5),
+      y: fillsWithMpg.map(f => f.mpg_p95),
       mode: 'lines',
       line: { color: '#4da6ff', width: 2 },
-      name: '5-fill rolling avg',
-      hovertemplate: '%{x}<br>%{y:.1f} mpg (avg)<extra></extra>',
+      name: 'p95 (20-fill window)',
+      hovertemplate: '%{x}<br>%{y:.1f} mpg (p95)<extra></extra>',
     },
   ], {
     ...PLOTLY_LAYOUT('Fuel Economy (mpg)'),
