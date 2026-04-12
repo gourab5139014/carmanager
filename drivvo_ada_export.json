@@ -2332,6 +2332,32 @@
       "tanque_cheio": false,
       "esqueceu_anterior": false,
       "observacao": null
+    },
+    {
+      "id": 180,
+      "data": "2026-04-08 09:00:00",
+      "combustivel": "Gasoline",
+      "odometro": 220379,
+      "preco": 5.699,
+      "valor_total": 73.87,
+      "volume": 12.962,
+      "distancia": 409,
+      "tanque_cheio": true,
+      "esqueceu_anterior": false,
+      "observacao": "Recorded via Gemini CLI"
+    },
+    {
+      "id": 181,
+      "data": "2026-04-08 15:17:00",
+      "combustivel": "Gasoline",
+      "odometro": 220677,
+      "preco": 5.599,
+      "valor_total": 60.95,
+      "volume": 10.886,
+      "distancia": 298,
+      "tanque_cheio": true,
+      "esqueceu_anterior": false,
+      "observacao": "Costco Burbank (Receipt Inferred)"
     }
   ],
   "services": [
