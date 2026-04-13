@@ -1,9 +1,15 @@
-name: Update Dashboard
+name: Deploy Dashboard
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -16,13 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Run process.py
-        run: python3 process.py
+      - name: Inject Supabase config
+        run: |
+          sed \
+            -e "s|__SUPABASE_URL__|${{ secrets.SUPABASE_URL }}|g" \
+            -e "s|__SUPABASE_ANON_KEY__|${{ secrets.SUPABASE_ANON_KEY }}|g" \
+            supabase-config.template.js > supabase-config.js
 
       - name: Upload to GitHub Pages
         uses: actions/upload-pages-artifact@v3
