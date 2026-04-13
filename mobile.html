@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Log Fill-up</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
 <script src="supabase-config.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -376,10 +377,26 @@ textarea { resize: none; min-height: 64px; }
   }
 
   // ── Image → JPEG base64 (handles HEIF/HEIC from iPhone) ─────────────────────
-  function toJpegBase64(file) {
+  async function toJpegBase64(file) {
+    let blob = file;
+    
+    // If it's HEIC/HEIF, convert it to JPEG blob first
+    const isHeic = file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif';
+    if (isHeic && typeof heic2any === 'function') {
+      try {
+        console.log('Converting HEIC to JPEG...');
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
+        blob = Array.isArray(converted) ? converted[0] : converted;
+        console.log('HEIC conversion successful');
+      } catch (err) {
+        console.error('HEIC conversion failed:', err);
+        // Fallback to original file, maybe browser supports it natively
+      }
+    }
+
     return new Promise((resolve, reject) => {
       const img = new Image();
-      const url = URL.createObjectURL(file);
+      const url = URL.createObjectURL(blob);
       img.onload = () => {
         const canvas = document.createElement('canvas');
         // Cap at 1024px on the long edge — plenty for OCR, reduces payload & processing time
@@ -393,7 +410,10 @@ textarea { resize: none; min-height: 64px; }
         const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
         resolve(dataUrl.split(',')[1]);
       };
-      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image decode failed')); };
+      img.onerror = () => { 
+        URL.revokeObjectURL(url); 
+        reject(new Error(`Image decode failed for ${file.name} (${file.type})`)); 
+      };
       img.src = url;
     });
   }
@@ -430,12 +450,19 @@ textarea { resize: none; min-height: 64px; }
     });
 
     async function processFile(file) {
+      console.log(`Processing file: ${file.name}, type: ${file.type}, size: ${file.size} bytes`);
       try {
         // Show thumbnail
         const thumbUrl = URL.createObjectURL(file);
         card.innerHTML = `<img class="thumb" src="${thumbUrl}" alt=""><div class="retake">retake</div>
           <div class="scan-overlay"><div class="spinner"></div></div>`;
         card.classList.add('captured', 'scanning');
+
+        // Check for HEIC/HEIF which lacks native browser support in some browsers
+        const isHeic = file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif') || file.type === 'image/heic' || file.type === 'image/heif';
+        if (isHeic && !window.heic2any) {
+          console.warn('HEIC detected but heic2any not loaded. Native browser support may fail.');
+        }
 
         // Convert to JPEG via Canvas (handles HEIF/HEIC and any other format)
         const base64 = await toJpegBase64(file);
