@@ -30,7 +30,7 @@ function p95(sorted) {
  */
 function computeMetrics(fillRows, serviceRows, expenseRows) {
   // ── Sort fills chronologically ──────────────────────────────────────────────
-  const fills = [...fillRows].sort((a, b) => a.date.localeCompare(b.date));
+  const fills = [...fillRows].filter(r => r.date).sort((a, b) => a.date.localeCompare(b.date));
 
   // ── Per-fill MPG and cost-per-mile ─────────────────────────────────────────
   fills.forEach(f => {
@@ -106,6 +106,7 @@ function computeMetrics(fillRows, serviceRows, expenseRows) {
   // Supabase schema uses `cost`; old dashboard-data.json used `total_cost`.
   // Expose both so the services table in index.html keeps working unchanged.
   const services = [...serviceRows]
+    .filter(r => r.date)
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(s => ({
       ...s,
@@ -115,6 +116,7 @@ function computeMetrics(fillRows, serviceRows, expenseRows) {
     }));
 
   const expenses = [...expenseRows]
+    .filter(r => r.date)
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(e => ({
       ...e,
@@ -130,9 +132,11 @@ function computeMetrics(fillRows, serviceRows, expenseRows) {
   const totalSvc  = services.reduce((s, sv) => s + (sv.total_cost || 0), 0);
   const totalExp  = expenses.reduce((s, e)  => s + (e.total_cost  || 0), 0);
   const odoms     = fills.map(f => f.odometer).filter(Boolean);
+  const odomMax   = odoms.length ? odoms.reduce((m, v) => Math.max(m, v), -Infinity) : null;
+  const odomMin   = odoms.length ? odoms.reduce((m, v) => Math.min(m, v), Infinity)  : null;
 
   // Days between consecutive fills
-  const fillDates = fills.map(f => new Date(f.date + 'T12:00:00Z').getTime());
+  const fillDates = fills.map(f => new Date(f.date.slice(0, 10) + 'T12:00:00Z').getTime());
   const gaps = fillDates.slice(1).map((d, i) => Math.round((d - fillDates[i]) / 86400000));
   const avgGap = gaps.length ? round1(gaps.reduce((s, g) => s + g, 0) / gaps.length) : null;
 
@@ -142,9 +146,9 @@ function computeMetrics(fillRows, serviceRows, expenseRows) {
     total_service_cost_usd: round2(totalSvc),
     total_expense_cost_usd: round2(totalExp),
     total_cost_usd:         round2(totalFuel + totalSvc + totalExp),
-    total_miles_driven:     odoms.length >= 2 ? Math.round(Math.max(...odoms) - Math.min(...odoms)) : 0,
-    odometer_start:         odoms.length ? Math.min(...odoms) : null,
-    odometer_end:           odoms.length ? Math.max(...odoms) : null,
+    total_miles_driven:     odoms.length >= 2 ? Math.round(odomMax - odomMin) : 0,
+    odometer_start:         odomMin,
+    odometer_end:           odomMax,
     avg_mpg:                validMpg.length  ? round2(validMpg.reduce((s, v) => s + v, 0) / validMpg.length)  : null,
     avg_cost_per_mile_usd:  validCpm.length  ? round4(validCpm.reduce((s, v) => s + v, 0) / validCpm.length)  : null,
     avg_days_between_fills: avgGap,
