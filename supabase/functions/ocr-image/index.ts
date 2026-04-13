@@ -12,8 +12,9 @@ Deno.serve(async (req) => {
 
   let type: string | undefined;
   try {
-    let image: string, mediaType: string;
-    ({ image, mediaType, type } = await req.json());
+    const body = await req.json();
+    type = body.type;
+    const { image, mediaType } = body;
     // type: 'odometer' | 'pump'
     // image: base64-encoded JPEG/PNG
     // mediaType: 'image/jpeg' | 'image/png' | 'image/webp'

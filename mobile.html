@@ -429,13 +429,13 @@ textarea { resize: none; min-height: 64px; }
     });
 
     async function processFile(file) {
-      // Show thumbnail
-      const thumbUrl = URL.createObjectURL(file);
-      card.innerHTML = `<img class="thumb" src="${thumbUrl}" alt=""><div class="retake">retake</div>
-        <div class="scan-overlay"><div class="spinner"></div></div>`;
-      card.classList.add('captured', 'scanning');
-
       try {
+        // Show thumbnail
+        const thumbUrl = URL.createObjectURL(file);
+        card.innerHTML = `<img class="thumb" src="${thumbUrl}" alt=""><div class="retake">retake</div>
+          <div class="scan-overlay"><div class="spinner"></div></div>`;
+        card.classList.add('captured', 'scanning');
+
         // Convert to JPEG via Canvas (handles HEIF/HEIC and any other format)
         const base64 = await toJpegBase64(file);
 
