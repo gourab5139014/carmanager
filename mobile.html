@@ -382,14 +382,15 @@ textarea { resize: none; min-height: 64px; }
       const url = URL.createObjectURL(file);
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        // Cap at 1600px on the long edge — enough for OCR, keeps payload small
-        const MAX = 1600;
+        // Cap at 1024px on the long edge — plenty for OCR, reduces payload & processing time
+        const MAX = 1024;
         const scale = Math.min(1, MAX / Math.max(img.width, img.height));
         canvas.width  = Math.round(img.width  * scale);
         canvas.height = Math.round(img.height * scale);
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
         URL.revokeObjectURL(url);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+        // Reduce quality to 0.8 to keep payload small
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
         resolve(dataUrl.split(',')[1]);
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image decode failed')); };
@@ -453,6 +454,11 @@ textarea { resize: none; min-height: 64px; }
           body: JSON.stringify({ image: base64, mediaType: 'image/jpeg', type }),
         });
 
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Server returned ${res.status}: ${text.slice(0, 100)}`);
+        }
+
         const data = await res.json();
 
         // Remove scanning overlay
@@ -464,7 +470,7 @@ textarea { resize: none; min-height: 64px; }
             autofill('f-odometer', data.odometer);
             addChip(`📍 ${Number(data.odometer).toLocaleString()} mi`);
           } else {
-            addChip(`Odometer unclear — enter manually`, true);
+            addChip(`Odometer unclear — ${data.error || 'enter manually'}`, true);
           }
         } else {
           let filled = false;
@@ -486,7 +492,7 @@ textarea { resize: none; min-height: 64px; }
             if (data.total_cost)    parts.push(`$${data.total_cost}`);
             addChip('⛽ ' + (parts.join(' · ') || 'pump read'));
           } else {
-            addChip('Pump display unclear — enter manually', true);
+            addChip(`Pump display unclear — ${data.error || 'enter manually'}`, true);
           }
         }
 
@@ -496,7 +502,7 @@ textarea { resize: none; min-height: 64px; }
         console.error('OCR processFile failed:', err);
         card.querySelector('.scan-overlay')?.remove();
         card.classList.remove('scanning');
-        addChip(`OCR error — enter manually`, true);
+        addChip(`OCR error: ${err.message}`, true);
       }
     } // end processFile
   }
