@@ -1,5 +1,6 @@
 import { initAuth, logout } from './auth';
 import { api } from './api';
+import { computeMetrics } from './metrics';
 
 const app = document.querySelector('#app')!;
 
@@ -85,27 +86,44 @@ async function renderDashboard() {
 
 async function loadFills(vehicleId: string) {
   const content = document.querySelector('#dashboard-content')!;
-  content.innerHTML = 'Loading refuelings...';
+  content.innerHTML = 'Loading data...';
   try {
-    const fills = await api.getRefuelings(vehicleId);
+    const fillRows = await api.getRefuelings(vehicleId);
+    const data = computeMetrics(fillRows);
+    const s = data.summary;
+
     content.innerHTML = `
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px;">
         <div style="background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #2a2a2a;">
-          <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Total Fills</div>
-          <div style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;">${fills.length}</div>
+          <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Total Miles</div>
+          <div style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;">\${s.total_miles_driven.toLocaleString()} mi</div>
+        </div>
+        <div style="background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #2a2a2a;">
+          <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Avg MPG</div>
+          <div style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;">\${s.avg_mpg || '—'}</div>
+        </div>
+        <div style="background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #2a2a2a;">
+          <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Total Fuel Cost</div>
+          <div style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;">$\${s.total_fuel_cost_usd.toLocaleString()}</div>
+        </div>
+        <div style="background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #2a2a2a;">
+          <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Fills</div>
+          <div style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;">\${s.total_fills}</div>
         </div>
       </div>
       <div style="background: #1a1a1a; border-radius: 8px; border: 1px solid #2a2a2a; overflow: hidden;">
         <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
           <thead style="background: #222; color: #888; text-transform: uppercase; font-size: 0.7rem;">
-            <tr><th style="padding: 10px; text-align: left;">Date</th><th style="padding: 10px; text-align: left;">Odo</th><th style="padding: 10px; text-align: left;">Cost</th></tr>
+            <tr><th style="padding: 10px; text-align: left;">Date</th><th style="padding: 10px; text-align: left;">Odo</th><th style="padding: 10px; text-align: left;">Vol</th><th style="padding: 10px; text-align: left;">MPG</th><th style="padding: 10px; text-align: left;">Cost</th></tr>
           </thead>
           <tbody>
-            ${fills.map((f: any) => `
+            \${data.fills.map((f: any) => `
               <tr style="border-top: 1px solid #222;">
-                <td style="padding: 10px;">${f.date}</td>
-                <td style="padding: 10px;">${f.odometer.toLocaleString()}</td>
-                <td style="padding: 10px;">$${f.total_cost}</td>
+                <td style="padding: 10px;">\${f.date}</td>
+                <td style="padding: 10px;">\${f.odometer.toLocaleString()}</td>
+                <td style="padding: 10px;">\${f.volume_gal}</td>
+                <td style="padding: 10px;">\${f.mpg || '—'}</td>
+                <td style="padding: 10px;">$\${f.total_cost}</td>
               </tr>
             `).join('')}
           </tbody>
