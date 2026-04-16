@@ -4,11 +4,10 @@ migrate.py — one-time import of drivvo_ada_export.json into Supabase.
 
 Usage:
     export SUPABASE_URL=https://xxxx.supabase.co
-    export SUPABASE_SERVICE_KEY=eyJ...   # use the SERVICE key, not anon key, for bulk insert
+    export SUPABASE_SERVICE_KEY=eyJ...
+    export USER_ID=your-user-uuid
+    export VEHICLE_ID=your-vehicle-uuid
     python3 migrate.py [--dry-run]
-
-The service key bypasses Row Level Security.  Never commit it.
-After migration, verify counts in the Supabase dashboard before retiring this script.
 """
 
 import json
@@ -31,7 +30,7 @@ def parse_date(s):
         return None
 
 
-def parse_refuelings(raw_refuelings):
+def parse_refuelings(raw_refuelings, user_id=None, vehicle_id=None):
     rows = []
     for r in raw_refuelings:
         date = parse_date(r.get("data"))
@@ -46,7 +45,7 @@ def parse_refuelings(raw_refuelings):
         full_tank   = bool(r.get("tanque_cheio", False))
         fuel_type   = r.get("combustivel") or "Unknown"
         notes       = r.get("observacao") or ""
-        rows.append({
+        row = {
             "date":          date,
             "odometer":      int(odometer) if odometer else None,
             "volume_gal":    round(float(volume), 3)    if volume    else None,
@@ -56,11 +55,14 @@ def parse_refuelings(raw_refuelings):
             "full_tank":     full_tank,
             "fuel_type":     fuel_type,
             "notes":         notes or None,
-        })
+        }
+        if user_id: row["user_id"] = user_id
+        if vehicle_id: row["vehicle_id"] = vehicle_id
+        rows.append(row)
     return rows
 
 
-def parse_services(raw_services):
+def parse_services(raw_services, user_id=None, vehicle_id=None):
     rows = []
     for s in raw_services:
         date = parse_date(s.get("data"))
@@ -71,7 +73,7 @@ def parse_services(raw_services):
         description = ", ".join(t.get("nome", "Unknown") for t in types) or "Service"
         location    = (s.get("local") or {}).get("nome", "") or None
         notes       = s.get("observacao") or None
-        rows.append({
+        row = {
             "date":        date,
             "odometer":    s.get("odometro") or None,
             "description": description,
@@ -79,11 +81,14 @@ def parse_services(raw_services):
             "category":    description.split(",")[0].strip() if description else None,
             "notes":       notes,
             "location":    location,
-        })
+        }
+        if user_id: row["user_id"] = user_id
+        if vehicle_id: row["vehicle_id"] = vehicle_id
+        rows.append(row)
     return rows
 
 
-def parse_expenses(raw_expenses):
+def parse_expenses(raw_expenses, user_id=None, vehicle_id=None):
     rows = []
     for e in raw_expenses:
         date = parse_date(e.get("data"))
@@ -93,14 +98,17 @@ def parse_expenses(raw_expenses):
         total_cost  = sum(t.get("valor", 0) or 0 for t in types)
         description = ", ".join(t.get("nome", "Unknown") for t in types) or "Expense"
         notes       = e.get("observacao") or None
-        rows.append({
+        row = {
             "date":        date,
             "odometer":    e.get("odometro") or None,
             "description": description,
             "cost":        round(float(total_cost), 2),
             "category":    description.split(",")[0].strip() if description else None,
             "notes":       notes,
-        })
+        }
+        if user_id: row["user_id"] = user_id
+        if vehicle_id: row["vehicle_id"] = vehicle_id
+        rows.append(row)
     return rows
 
 
@@ -148,6 +156,8 @@ def main():
 
     supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
     service_key  = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    user_id      = os.environ.get("USER_ID", "")
+    vehicle_id   = os.environ.get("VEHICLE_ID", "")
 
     if not args.dry_run:
         if not supabase_url:
@@ -156,14 +166,20 @@ def main():
         if not service_key:
             print("ERROR: set SUPABASE_SERVICE_KEY environment variable", file=sys.stderr)
             sys.exit(1)
+        if not user_id:
+            print("ERROR: set USER_ID environment variable", file=sys.stderr)
+            sys.exit(1)
+        if not vehicle_id:
+            print("ERROR: set VEHICLE_ID environment variable", file=sys.stderr)
+            sys.exit(1)
 
     print(f"Reading {INPUT_FILE} ...")
     with open(INPUT_FILE) as f:
         raw = json.load(f)
 
-    refueling_rows = parse_refuelings(raw.get("refuelings", []))
-    service_rows   = parse_services(raw.get("services", []))
-    expense_rows   = parse_expenses(raw.get("expenses", []))
+    refueling_rows = parse_refuelings(raw.get("refuelings", []), user_id, vehicle_id)
+    service_rows   = parse_services(raw.get("services", []), user_id, vehicle_id)
+    expense_rows   = parse_expenses(raw.get("expenses", []), user_id, vehicle_id)
 
     print(f"Parsed: {len(refueling_rows)} refuelings, {len(service_rows)} services, {len(expense_rows)} expenses")
     print()
