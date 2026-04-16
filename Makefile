@@ -2,13 +2,8 @@
 PORT ?= 9000
 
 # ── Dev ───────────────────────────────────────────────────────────────────────
-serve: ## Start local dev server (default port 9000, override with PORT=XXXX)
-	@lsof -ti :$(PORT) | xargs kill 2>/dev/null || true
-	@echo ""
-	@echo "  Dashboard  →  http://localhost:$(PORT)/index.html"
-	@echo "  Log fill   →  http://localhost:$(PORT)/mobile.html"
-	@echo ""
-	python3 -m http.server $(PORT) --directory .
+serve: ## Start local dev server
+	cd frontend && npm run dev
 
 kill: ## Kill whatever is running on PORT (default 9000)
 	@lsof -ti :$(PORT) | xargs kill 2>/dev/null && echo "Killed process on :$(PORT)" || echo "Nothing running on :$(PORT)"
@@ -19,8 +14,8 @@ test: test-py test-js ## Run all tests
 test-py: ## Run Python tests (migrate.py parsing)
 	python3 tests/test_migrate.py
 
-test-js: ## Run JavaScript tests (metrics.js computation)
-	node tests/test_metrics.js
+test-js: ## Run JavaScript tests (metrics.ts computation)
+	cd frontend && npm test
 
 test-ocr: ## Run OCR integration tests (hits live edge function — requires network)
 	pytest tests/test_ocr.py -v

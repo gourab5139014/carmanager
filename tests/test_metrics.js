@@ -3,7 +3,10 @@
  * Run: node tests/test_metrics.js
  */
 
-const { computeMetrics, p95, round2 } = require('../metrics.js');
+import { computeMetrics, p95 } from '../frontend/src/metrics.ts';
+
+// Helper function to mock round2 since it's not exported
+function round2(v) { return Math.round(v * 100) / 100; }
 
 let passed = 0;
 let failed = 0;

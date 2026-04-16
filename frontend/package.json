@@ -6,13 +6,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "tsx ../tests/test_metrics.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.42.0",
     "plotly.js-dist-min": "^2.30.0"
   },
   "devDependencies": {
+    "tsx": "^4.21.0",
     "typescript": "^5.2.2",
     "vite": "^5.2.0",
     "vite-plugin-pwa": "^0.19.0"
