@@ -113,7 +113,9 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
       box.querySelector('span:first-child')!.textContent = '✅';
 
     } catch (err: any) {
-      alert('OCR Failed: ' + err.message);
+      console.error('Processing error:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      alert('Failed to process image: ' + msg);
       statusDiv.style.display = 'none';
       confirmDiv.style.display = 'block';
     }
@@ -176,27 +178,27 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
   });
 }
 
-function toJpegBase64(file: File): Promise<string> {
-  return new Promise(async (resolve, reject) => {
-    let blob: Blob = file;
-    
-    // 1. Convert HEIC/HEIF to JPEG blob if needed
-    const isHeic = file.name.toLowerCase().endsWith('.heic') || 
-                   file.name.toLowerCase().endsWith('.heif') || 
-                   file.type === 'image/heic' || 
-                   file.type === 'image/heif';
+async function toJpegBase64(file: File): Promise<string> {
+  let blob: Blob = file;
+  
+  // 1. Convert HEIC/HEIF to JPEG blob if needed
+  const isHeic = file.name.toLowerCase().endsWith('.heic') || 
+                 file.name.toLowerCase().endsWith('.heif') || 
+                 file.type === 'image/heic' || 
+                 file.type === 'image/heif';
 
-    if (isHeic) {
-      try {
-        console.log('Converting HEIC to JPEG...');
-        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
-        blob = Array.isArray(converted) ? converted[0] : converted;
-      } catch (err) {
-        console.error('HEIC conversion failed:', err);
-      }
+  if (isHeic) {
+    try {
+      console.log('Converting HEIC to JPEG...');
+      const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
+      blob = Array.isArray(converted) ? converted[0] : converted;
+    } catch (err) {
+      console.error('HEIC conversion failed:', err);
     }
+  }
 
-    // 2. Downscale via Canvas to 1024px max (Anthropic limit/optimization)
+  // 2. Downscale via Canvas to 1024px max
+  return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(blob);
     img.onload = () => {
@@ -210,11 +212,18 @@ function toJpegBase64(file: File): Promise<string> {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(url);
       
-      // Return raw base64 (Anthropic expects no data:image/jpeg;base64, prefix)
       const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
-      resolve(dataUrl.split(',')[1]);
+      const base64 = dataUrl.split(',')[1];
+      if (!base64) {
+        reject(new Error('Failed to generate base64 from canvas'));
+      } else {
+        resolve(base64);
+      }
     };
-    img.onerror = reject;
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image into canvas'));
+    };
     img.src = url;
   });
 }
