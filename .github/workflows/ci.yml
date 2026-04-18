@@ -26,13 +26,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Hono and other npm packages are imported via 'npm:...' in Deno/Edge functions
-          # but for tests/test_metrics.js (Node), we might need to install them if they aren't globally available.
-          # However, metrics.js is currently standalone logic.
+          # Install frontend dependencies for tests (like tsx)
+          cd frontend && npm ci
           # For Python:
           python -m pip install --upgrade pip
-          # If there were requirements, we'd install them here:
-          # pip install -r requirements.txt
 
       - name: Run JS tests
         run: make test-js

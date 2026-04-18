@@ -7,6 +7,19 @@
   },
   "refuelings": [
     {
+      "id": 182,
+      "data": "2026-04-15",
+      "combustivel": "Gasoline",
+      "odometro": 220936,
+      "preco": 5.199,
+      "valor_total": 57.83,
+      "volume": 11.123,
+      "distancia": 259,
+      "tanque_cheio": true,
+      "esqueceu_anterior": false,
+      "observacao": "Costco Mission Valley"
+    },
+    {
       "id": 1,
       "data": "2026-03-24",
       "combustivel": "Gasoline",

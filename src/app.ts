@@ -1,67 +1,216 @@
 import { Hono } from 'npm:hono';
 import { cors } from 'npm:hono/cors';
 import { logger } from 'npm:hono/logger';
+import { createClient } from 'npm:@supabase/supabase-js';
 import { runOcr } from './ocr-service.ts';
 
 /**
- * Portable Hono Application
- * This defines our API routes and logic independently of the host.
+ * Multi-Tenant Car Manager Unified API (v2.0)
  */
 const app = new Hono();
 
-// Middleware: Standard Logger (stdout)
+// Middleware: Standard Logger
 app.use('*', logger());
 
-// Middleware: CORS (allowing the browser dashboard to talk to this)
+// Middleware: CORS
 app.use('*', cors({
   origin: '*',
   allowHeaders: ['authorization', 'x-client-info', 'apikey', 'content-type'],
-  allowMethods: ['POST', 'OPTIONS'],
+  allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   exposeHeaders: ['Content-Length'],
   maxAge: 600,
 }));
 
-// Route: Health Check
-app.get('/health', (c) => c.json({ status: 'ok' }));
+/**
+ * Middleware: Require a Bearer token on any route that invokes the Anthropic API.
+ * The actual JWT validation happens via Supabase RLS; this guard prevents
+ * unauthenticated callers from burning API quota.
+ */
+const requireAuth = async (c: any, next: any) => {
+  if (!c.req.header('Authorization')) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  await next();
+};
 
-// Route: Core OCR Endpoint (handle any path as the function name might be in the URL)
-app.post('*', async (c) => {
-  let type: 'odometer' | 'pump' | undefined;
-  
+/**
+ * Helper: Create Supabase client with user's JWT for RLS
+ */
+const getSupabase = (c: any) => {
+  const url = c.env?.SUPABASE_URL || Deno.env.get('SUPABASE_URL');
+  const anonKey = c.env?.SUPABASE_ANON_KEY || Deno.env.get('SUPABASE_ANON_KEY');
+  const authHeader = c.req.header('Authorization');
+
+  if (!url || !anonKey) {
+    throw new Error('Supabase configuration missing');
+  }
+
+  // Create client with the user's JWT passed in the Authorization header
+  // This allows RLS (Row Level Security) to work correctly.
+  return createClient(url, anonKey, {
+    global: {
+      headers: authHeader ? { Authorization: authHeader } : {},
+    },
+  });
+};
+
+// Route: Health Check
+app.get('/health', (c) => c.json({ status: 'ok', version: '2.0.0' }));
+
+/**
+ * GET /v1/vehicles
+ * List all vehicles owned by the authenticated user.
+ */
+app.get('/v1/vehicles', async (c) => {
+  try {
+    const sb = getSupabase(c);
+    const { data, error } = await sb
+      .from('vehicles')
+      .select('*')
+      .order('name');
+
+    if (error) throw error;
+    return c.json(data);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+});
+
+/**
+ * GET /v1/refuelings
+ * List refuelings, optionally filtered by vehicle_id.
+ */
+app.get('/v1/refuelings', async (c) => {
+  const vehicleId = c.req.query('vehicle_id');
+  try {
+    const sb = getSupabase(c);
+    let query = sb.from('refuelings').select('*').order('date', { ascending: false });
+    
+    if (vehicleId) {
+      query = query.eq('vehicle_id', vehicleId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return c.json(data);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+});
+
+/**
+ * POST /v1/ocr
+ * Standalone OCR route (legacy support)
+ */
+app.post('/v1/ocr', requireAuth, async (c) => {
+  let type: string | undefined;
   try {
     const body = await c.req.json();
     type = body.type;
     const { image, mediaType } = body;
-    
-    // API key from the environment (Hono handles this cross-platform via c.env)
-    // On Supabase/Deno, it uses Deno.env.get under the hood
     const apiKey = c.env?.ANTHROPIC_API_KEY || Deno.env.get('ANTHROPIC_API_KEY');
 
-    if (!apiKey) {
-      throw new Error('ANTHROPIC_API_KEY is missing');
-    }
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY is missing');
 
     const result = await runOcr({
       image,
       mediaType,
       type: type as 'odometer' | 'pump',
       apiKey,
-      logger: (msg, data) => {
-        // Here we could also send logs to an external service like Axiom
-        console.log(`[APP-LOG] ${msg}`, data || '');
-      },
     });
 
     return c.json(result);
-  } catch (err) {
-    console.error(`[APP-ERROR]`, err);
+  } catch (err: any) {
+    // Always return 200 with null fields — UI shows "enter manually", never crashes
+    return c.json(
+      type === 'odometer'
+        ? { odometer: null, error: err.message }
+        : { volume_gal: null, price_per_gal: null, total_cost: null, error: err.message }
+    );
+  }
+});
+
+/**
+ * POST /v1/refuelings
+ * Unified log route: handles metadata, distance computation, and DB insert.
+ */
+app.post('/v1/refuelings', async (c) => {
+  try {
+    const sb = getSupabase(c);
+    const body = await c.req.json();
     
-    const msg = String(err);
-    const nullResult = type === 'odometer'
-      ? { odometer: null, error: msg }
-      : { volume_gal: null, price_per_gal: null, total_cost: null, error: msg };
-      
-    return c.json(nullResult, 200); // UI expects 200 with error field
+    const { 
+      date, odometer, volume_gal, price_per_gal, 
+      total_cost, fuel_type, full_tank, notes, vehicle_id 
+    } = body;
+
+    if (!vehicle_id) throw new Error('vehicle_id is required');
+    if (odometer === undefined || odometer === null) throw new Error('odometer is required');
+    if (typeof odometer !== 'number' || odometer < 0) throw new Error('odometer must be a non-negative number');
+
+    // 0. Verify vehicle belongs to the authenticated user (IDOR prevention)
+    const { data: vehicle, error: vehicleErr } = await sb
+      .from('vehicles')
+      .select('id')
+      .eq('id', vehicle_id)
+      .single();
+    if (vehicleErr || !vehicle) throw new Error('vehicle not found or access denied');
+
+    // 1. Compute distance_mi from previous fill
+    let distance_mi = null;
+    const { data: prevFills } = await sb
+      .from('refuelings')
+      .select('odometer')
+      .eq('vehicle_id', vehicle_id)
+      .lt('odometer', odometer)
+      .order('odometer', { ascending: false })
+      .limit(1);
+
+    if (prevFills && prevFills.length > 0) {
+      distance_mi = odometer - prevFills[0].odometer;
+    }
+
+    // 2. Insert record
+    const { data, error } = await sb.from('refuelings').insert({
+      date, odometer, volume_gal, price_per_gal, 
+      total_cost, fuel_type, full_tank, notes, 
+      vehicle_id, distance_mi
+    }).select().single();
+
+    if (error) throw error;
+    return c.json(data);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+});
+
+// Backward compatibility: maintain the old POST route for now
+app.post('*', requireAuth, async (c) => {
+  // If it starts with /v1, it should have been caught by specific routes
+  if (c.req.path.startsWith('/v1/')) {
+    return c.json({ error: 'Not Found' }, 404);
+  }
+  // Otherwise, fallback to the old OCR logic — preserve the 200+null error contract
+  let type: string | undefined;
+  try {
+    const body = await c.req.json();
+    type = body.type;
+    const apiKey = c.env?.ANTHROPIC_API_KEY || Deno.env.get('ANTHROPIC_API_KEY');
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY is missing');
+    const result = await runOcr({
+      image: body.image,
+      mediaType: body.mediaType,
+      type: body.type,
+      apiKey,
+    });
+    return c.json(result);
+  } catch (err: any) {
+    // Always return 200 with null fields — UI shows "enter manually", never crashes
+    return c.json(
+      type === 'odometer'
+        ? { odometer: null, error: err.message }
+        : { volume_gal: null, price_per_gal: null, total_cost: null, error: err.message }
+    );
   }
 });
 

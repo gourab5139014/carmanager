@@ -208,3 +208,10 @@ __marimo__/
 dashboard-data.json
 supabase-config.js
 supabase/.temp/
+
+# Frontend v2
+frontend/node_modules
+dist
+.env
+*.skill
+large_payload.json

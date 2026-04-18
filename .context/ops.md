@@ -58,11 +58,28 @@ Prerequisites:
 - Migration was verified Apr 12: top 5 records matched exactly against source JSON
 - New fills logged via mobile.html auto-compute `distance_mi` from previous fill's odometer
 
-## Observability (current — limited)
+## Observability
 
+### Current (Limited)
 - Edge function logs: `supabase functions logs ocr-image` (transient, not searchable)
 - Hono logger middleware active in `src/app.ts` — logs request/response to Deno stdout
-- No persistent log drain yet (design doc exists: `docs/design-docs/2026-04-15-edge-observability.md`)
+
+### Planned: Edge Observability (2026-04-15)
+
+**The Problem:** Debugging OCR failures currently requires running `supabase functions logs` in a terminal, which is slow, transient, and lacks structured search. If a user's photo fails to parse, we have no persistent record of the error or the LLM's raw response, making it hard to improve the prompt.
+
+**The Solution:** Implement a structured log drain in the Hono app (`src/app.ts`).
+- Capture: Request headers (anonymized), OCR results, LLM latency, and error stack traces.
+- Sink: Send logs via HTTP POST to an external provider (Axiom or a custom Supabase table) using `ctx.executionCtx.waitUntil` to avoid blocking the user response.
+
+**Technical Approach:** The bottleneck is logging without adding latency.
+1. Create a `logger-middleware.ts`.
+2. Use `c.executionCtx.waitUntil` (Deno/Cloudflare standard) to ship logs after the response is sent.
+3. Add a `LOG_DRAIN_URL` and `LOG_DRAIN_TOKEN` to Supabase secrets.
+
+**Success Metrics:**
+- **The Feedback Loop:** Real-time visibility into OCR "confidence" and failure modes in a searchable dashboard.
+- **Reliability:** 100% capture of OCR failures for post-mortem analysis.
 
 ## Runbooks
 

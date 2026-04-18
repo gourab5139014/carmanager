@@ -3,7 +3,7 @@
  * Run: node tests/test_metrics.js
  */
 
-const { computeMetrics, p95, round2 } = require('../metrics.js');
+import { computeMetrics, p95, round2 } from '../frontend/src/metrics.ts';
 
 let passed = 0;
 let failed = 0;

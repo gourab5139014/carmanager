@@ -76,20 +76,33 @@ Note: `distance_mi` is computed at insert time by mobile.html — queries previo
 - OCR errors: always return `{field: null, error: "reason"}` with HTTP 200 — UI shows "enter manually", never crashes
 - No React, no Tailwind, no build tools in frontend
 
-## Next Features (design docs exist in docs/design-docs/)
+## Next Features (v2.0 Roadmap)
 
-### 1. Multi-Vehicle Support (`docs/design-docs/2026-04-15-multi-vehicle-support.md`)
-Add `vehicles` table. Link existing records to a "Default" vehicle. Vehicle switcher in mobile UI. This is the highest-priority next feature — the current flat schema breaks if user has 2 cars.
+### 1. Unified API & Multi-Tenant Refactor (Planned: 2026-04-15)
 
-Schema change needed:
-```sql
-CREATE TABLE vehicles (id uuid DEFAULT gen_random_uuid() PRIMARY KEY, name text, make text, model text, year int);
-ALTER TABLE refuelings ADD COLUMN vehicle_id uuid REFERENCES vehicles(id);
--- same for services, expenses
-```
+**The Problem:** Currently, the "brains" of the app are scattered across frontend files. v1 is single-user and lacks structured reuse. Productization requires secure multi-tenancy, multiple vehicles per user, and a centralized API that any frontend (Web, Mobile, MCP) can use.
 
-### 2. Edge Observability (`docs/design-docs/2026-04-15-edge-observability.md`)
-Structured log drain from Hono middleware. Use `c.executionCtx.waitUntil` to POST logs after response. Captures OCR confidence, LLM latency, errors. Sinks: Axiom or custom Supabase table. New secrets needed: `LOG_DRAIN_URL`, `LOG_DRAIN_TOKEN`.
+**The Solution:**
+1. **Multi-Tenant Schema:** Add `user_id` and `vehicle_id` to all tables. Use Postgres RLS (Row Level Security) to ensure users can only ever see their own data.
+2. **Unified Hono API:** Refactor the Edge Function into a full REST API (`/v1`) that handles auth, OCR, and DB operations in one place.
+3. **PWA Frontend:** A modern, installable web app (SPA) that interacts ONLY with the `/v1` API.
+
+**Technical Approach:**
+1. **Database Architecture:**
+   - New Table: `vehicles` (id, user_id, name, make, model, year, active).
+   - Link existing records to a "Default" vehicle for the current user.
+   - Strict RLS Policies: `CREATE POLICY "User-specific access" ON refuelings FOR ALL USING (auth.uid() = user_id);`
+2. **Backend Architecture (Hono):**
+   - Hono creates a Supabase client using the user's JWT from the `Authorization` header for each request.
+   - `POST /v1/refuelings` handles image OCR + distance computation + DB insert in one operation.
+3. **Frontend Architecture:**
+   - Migrate to a Vite-based Single Page App (SPA).
+   - PWA support for "Add to Home Screen" on iOS/Android.
+
+**Success Metrics:**
+- **Portability:** Any client with a valid JWT can log a fill via `POST /v1/refuelings`.
+- **Security:** Strict isolation between users at the database level.
+- **Speed:** Zero manual entry (OCR) remains fast on any device.
 
 ## Known Technical Debt
 
