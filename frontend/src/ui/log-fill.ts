@@ -83,21 +83,14 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
     statusText.textContent = msg;
   };
 
-  captureOdo.addEventListener('click', () => { currentType = 'odometer'; fileInput.click(); });
-  capturePump.addEventListener('click', () => { currentType = 'pump'; fileInput.click(); });
-
-  fileInput.addEventListener('change', async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file || !currentType) return;
-
-    showStatus(`Reading ${currentType} image...`);
-    
+  const processFile = async (file: File, type: 'odometer' | 'pump') => {
+    showStatus(`Reading ${type} image...`);
     try {
       const base64 = await toBase64(file);
       const result = await api.runOcr({
         image: base64.split(',')[1],
         mediaType: file.type,
-        type: currentType
+        type
       });
 
       if (result.error) throw new Error(result.error);
@@ -113,16 +106,45 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
       confirmDiv.style.display = 'block';
       statusDiv.style.display = 'none';
       
-      // Visual feedback on the capture boxes
-      const box = currentType === 'odometer' ? captureOdo : capturePump;
+      // Visual feedback
+      const box = type === 'odometer' ? captureOdo : capturePump;
       box.style.borderColor = '#4da6ff';
       box.querySelector('span:first-child')!.textContent = '✅';
 
     } catch (err: any) {
       alert('OCR Failed: ' + err.message);
       statusDiv.style.display = 'none';
-      confirmDiv.style.display = 'block'; // Let user enter manually
+      confirmDiv.style.display = 'block';
     }
+  };
+
+  captureOdo.addEventListener('click', () => { currentType = 'odometer'; fileInput.click(); });
+  capturePump.addEventListener('click', () => { currentType = 'pump'; fileInput.click(); });
+
+  // Drag & Drop
+  [captureOdo, capturePump].forEach(box => {
+    const type = box.id === 'capture-odo' ? 'odometer' : 'pump';
+    box.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      box.style.borderColor = '#4da6ff';
+      box.style.background = '#252525';
+    });
+    box.addEventListener('dragleave', () => {
+      box.style.borderColor = '#333';
+      box.style.background = '#1a1a1a';
+    });
+    box.addEventListener('drop', (e) => {
+      e.preventDefault();
+      box.style.borderColor = '#333';
+      box.style.background = '#1a1a1a';
+      const file = e.dataTransfer?.files[0];
+      if (file) processFile(file, type);
+    });
+  });
+
+  fileInput.addEventListener('change', async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (file && currentType) processFile(file, currentType);
   });
 
   form.addEventListener('submit', async (e) => {
