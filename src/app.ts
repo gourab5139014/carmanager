@@ -22,6 +22,18 @@ app.use('*', cors({
 }));
 
 /**
+ * Middleware: Require a Bearer token on any route that invokes the Anthropic API.
+ * The actual JWT validation happens via Supabase RLS; this guard prevents
+ * unauthenticated callers from burning API quota.
+ */
+const requireAuth = async (c: any, next: any) => {
+  if (!c.req.header('Authorization')) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+  await next();
+};
+
+/**
  * Helper: Create Supabase client with user's JWT for RLS
  */
 const getSupabase = (c: any) => {
@@ -90,10 +102,12 @@ app.get('/v1/refuelings', async (c) => {
  * POST /v1/ocr
  * Standalone OCR route (legacy support)
  */
-app.post('/v1/ocr', async (c) => {
+app.post('/v1/ocr', requireAuth, async (c) => {
+  let type: string | undefined;
   try {
     const body = await c.req.json();
-    const { image, mediaType, type } = body;
+    type = body.type;
+    const { image, mediaType } = body;
     const apiKey = c.env?.ANTHROPIC_API_KEY || Deno.env.get('ANTHROPIC_API_KEY');
 
     if (!apiKey) throw new Error('ANTHROPIC_API_KEY is missing');
@@ -107,7 +121,12 @@ app.post('/v1/ocr', async (c) => {
 
     return c.json(result);
   } catch (err: any) {
-    return c.json({ error: err.message }, 500);
+    // Always return 200 with null fields — UI shows "enter manually", never crashes
+    return c.json(
+      type === 'odometer'
+        ? { odometer: null, error: err.message }
+        : { volume_gal: null, price_per_gal: null, total_cost: null, error: err.message }
+    );
   }
 });
 
@@ -126,7 +145,16 @@ app.post('/v1/refuelings', async (c) => {
     } = body;
 
     if (!vehicle_id) throw new Error('vehicle_id is required');
-    if (!odometer) throw new Error('odometer is required');
+    if (odometer === undefined || odometer === null) throw new Error('odometer is required');
+    if (typeof odometer !== 'number' || odometer < 0) throw new Error('odometer must be a non-negative number');
+
+    // 0. Verify vehicle belongs to the authenticated user (IDOR prevention)
+    const { data: vehicle, error: vehicleErr } = await sb
+      .from('vehicles')
+      .select('id')
+      .eq('id', vehicle_id)
+      .single();
+    if (vehicleErr || !vehicle) throw new Error('vehicle not found or access denied');
 
     // 1. Compute distance_mi from previous fill
     let distance_mi = null;
@@ -157,24 +185,32 @@ app.post('/v1/refuelings', async (c) => {
 });
 
 // Backward compatibility: maintain the old POST route for now
-app.post('*', async (c) => {
+app.post('*', requireAuth, async (c) => {
   // If it starts with /v1, it should have been caught by specific routes
   if (c.req.path.startsWith('/v1/')) {
     return c.json({ error: 'Not Found' }, 404);
   }
-  // Otherwise, fallback to the old OCR logic
+  // Otherwise, fallback to the old OCR logic — preserve the 200+null error contract
+  let type: string | undefined;
   try {
     const body = await c.req.json();
+    type = body.type;
     const apiKey = c.env?.ANTHROPIC_API_KEY || Deno.env.get('ANTHROPIC_API_KEY');
+    if (!apiKey) throw new Error('ANTHROPIC_API_KEY is missing');
     const result = await runOcr({
       image: body.image,
       mediaType: body.mediaType,
       type: body.type,
-      apiKey: apiKey!,
+      apiKey,
     });
     return c.json(result);
   } catch (err: any) {
-    return c.json({ error: err.message }, 500);
+    // Always return 200 with null fields — UI shows "enter manually", never crashes
+    return c.json(
+      type === 'odometer'
+        ? { odometer: null, error: err.message }
+        : { volume_gal: null, price_per_gal: null, total_cost: null, error: err.message }
+    );
   }
 });
 

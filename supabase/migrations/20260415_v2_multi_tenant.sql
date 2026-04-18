@@ -13,10 +13,10 @@ CREATE TABLE IF NOT EXISTS public.vehicles (
   active boolean DEFAULT true
 );
 
--- 2. Insert default vehicle for existing user
--- User ID: 5423b575-98f5-4522-acf4-4f3ff4f12f26 (gourab@carmanager.app)
+-- 2. Insert default vehicle for existing user (idempotent)
 INSERT INTO public.vehicles (user_id, name, make, model, year)
-VALUES ('5423b575-98f5-4522-acf4-4f3ff4f12f26', 'Primary Lexus', 'Lexus', 'ES 350', 2010);
+VALUES ('5423b575-98f5-4522-acf4-4f3ff4f12f26', 'Primary Lexus', 'Lexus', 'ES 350', 2010)
+ON CONFLICT DO NOTHING;
 
 -- Get the ID of the new vehicle for linking
 DO $$
@@ -24,7 +24,7 @@ DECLARE
     v_id uuid;
     u_id uuid := '5423b575-98f5-4522-acf4-4f3ff4f12f26';
 BEGIN
-    SELECT id INTO v_id FROM public.vehicles WHERE user_id = u_id LIMIT 1;
+    SELECT id INTO STRICT v_id FROM public.vehicles WHERE user_id = u_id AND name = 'Primary Lexus';
 
     -- 3. Update refuelings
     ALTER TABLE public.refuelings ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
@@ -57,8 +57,11 @@ BEGIN
     ALTER TABLE public.expenses ALTER COLUMN user_id SET DEFAULT auth.uid();
 END $$;
 
--- 6. Enable RLS on vehicles
+-- 6. Enable RLS on all tables
 ALTER TABLE public.vehicles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.refuelings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.services ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 
 -- 7. Reset and Secure Policies
 -- Drop existing public policies
@@ -67,16 +70,29 @@ DROP POLICY IF EXISTS "auth insert" ON public.refuelings;
 DROP POLICY IF EXISTS "public read" ON public.services;
 DROP POLICY IF EXISTS "public read" ON public.expenses;
 
--- Create strict user-level policies
+-- Create strict user-level policies (USING for reads, WITH CHECK for writes)
 CREATE POLICY "Users can manage their own vehicles" ON public.vehicles
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can manage their own refuelings" ON public.refuelings
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can manage their own services" ON public.services
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 CREATE POLICY "Users can manage their own expenses" ON public.expenses
-  FOR ALL USING (auth.uid() = user_id);
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- 8. Unique constraint to prevent duplicate odometer entries (also guards distance_mi race condition)
+ALTER TABLE public.refuelings ADD CONSTRAINT refuelings_vehicle_odometer_unique UNIQUE (vehicle_id, odometer);
+
+-- 9. Indexes on foreign key columns (run after migration completes)
+-- Note: CONCURRENTLY cannot run inside a transaction block; these use plain CREATE.
+-- Run during a low-traffic window or as a separate migration step if table is large.
+CREATE INDEX IF NOT EXISTS idx_refuelings_vehicle_id ON public.refuelings(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_refuelings_user_id    ON public.refuelings(user_id);
+CREATE INDEX IF NOT EXISTS idx_services_vehicle_id   ON public.services(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_services_user_id      ON public.services(user_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_vehicle_id   ON public.expenses(vehicle_id);
+CREATE INDEX IF NOT EXISTS idx_expenses_user_id      ON public.expenses(user_id);
 

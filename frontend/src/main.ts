@@ -1,4 +1,4 @@
-import { initAuth, logout } from './auth';
+import { initAuth, logout, supabase } from './auth';
 import { api } from './api';
 import { computeMetrics } from './metrics';
 
@@ -30,7 +30,7 @@ async function renderLogin() {
     btn.textContent = 'Signing in...';
     errorEl.style.display = 'none';
 
-    const { error } = await (await import('./auth')).supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       errorEl.textContent = error.message;
       errorEl.style.display = 'block';
@@ -70,6 +70,11 @@ async function renderDashboard() {
       select.appendChild(opt);
     });
 
+    if (!vehicles.length) {
+      document.querySelector('#dashboard-content')!.textContent = 'No vehicles found. Add a vehicle to get started.';
+      return;
+    }
+
     const activeVehicleId = localStorage.getItem('active_vehicle_id') || vehicles[0]?.id;
     if (activeVehicleId) select.value = activeVehicleId;
 
@@ -92,23 +97,24 @@ async function loadFills(vehicleId: string) {
     const data = computeMetrics(fillRows);
     const s = data.summary;
 
+    // Build summary cards — static text only, safe for innerHTML
     content.innerHTML = `
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 20px;">
         <div style="background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #2a2a2a;">
           <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Total Miles</div>
-          <div style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;">\${s.total_miles_driven.toLocaleString()} mi</div>
+          <div id="stat-miles" style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;"></div>
         </div>
         <div style="background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #2a2a2a;">
           <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Avg MPG</div>
-          <div style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;">\${s.avg_mpg || '—'}</div>
+          <div id="stat-mpg" style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;"></div>
         </div>
         <div style="background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #2a2a2a;">
           <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Total Fuel Cost</div>
-          <div style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;">$\${s.total_fuel_cost_usd.toLocaleString()}</div>
+          <div id="stat-cost" style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;"></div>
         </div>
         <div style="background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #2a2a2a;">
           <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Fills</div>
-          <div style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;">\${s.total_fills}</div>
+          <div id="stat-fills" style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;"></div>
         </div>
       </div>
       <div style="background: #1a1a1a; border-radius: 8px; border: 1px solid #2a2a2a; overflow: hidden;">
@@ -116,20 +122,36 @@ async function loadFills(vehicleId: string) {
           <thead style="background: #222; color: #888; text-transform: uppercase; font-size: 0.7rem;">
             <tr><th style="padding: 10px; text-align: left;">Date</th><th style="padding: 10px; text-align: left;">Odo</th><th style="padding: 10px; text-align: left;">Vol</th><th style="padding: 10px; text-align: left;">MPG</th><th style="padding: 10px; text-align: left;">Cost</th></tr>
           </thead>
-          <tbody>
-            \${data.fills.map((f: any) => `
-              <tr style="border-top: 1px solid #222;">
-                <td style="padding: 10px;">\${f.date}</td>
-                <td style="padding: 10px;">\${f.odometer.toLocaleString()}</td>
-                <td style="padding: 10px;">\${f.volume_gal}</td>
-                <td style="padding: 10px;">\${f.mpg || '—'}</td>
-                <td style="padding: 10px;">$\${f.total_cost}</td>
-              </tr>
-            `).join('')}
-          </tbody>
+          <tbody id="fills-tbody"></tbody>
         </table>
       </div>
     `;
+
+    // Populate stats via textContent (safe)
+    document.querySelector('#stat-miles')!.textContent = `${s.total_miles_driven.toLocaleString()} mi`;
+    document.querySelector('#stat-mpg')!.textContent = s.avg_mpg ? String(s.avg_mpg) : '—';
+    document.querySelector('#stat-cost')!.textContent = `$${s.total_fuel_cost_usd.toLocaleString()}`;
+    document.querySelector('#stat-fills')!.textContent = String(s.total_fills);
+
+    // Build table rows via DOM API — no innerHTML with user data
+    const tbody = document.querySelector('#fills-tbody')!;
+    data.fills.forEach((f: any) => {
+      const tr = document.createElement('tr');
+      tr.style.borderTop = '1px solid #222';
+      [
+        f.date,
+        f.odometer != null ? f.odometer.toLocaleString() : '—',
+        f.volume_gal ?? '—',
+        f.mpg ?? '—',
+        f.total_cost != null ? `$${f.total_cost}` : '—',
+      ].forEach(val => {
+        const td = document.createElement('td');
+        td.style.padding = '10px';
+        td.textContent = String(val);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
   } catch (err: any) {
     content.textContent = 'Error: ' + err.message;
   }

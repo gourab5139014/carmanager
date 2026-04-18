@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           # Install frontend dependencies for tests (like tsx)
-          cd frontend && npm install
+          cd frontend && npm ci
           # For Python:
           python -m pip install --upgrade pip
 

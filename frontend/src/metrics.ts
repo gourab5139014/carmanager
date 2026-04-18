@@ -6,7 +6,7 @@
  */
 
 function round1(v: number) { return Math.round(v * 10) / 10; }
-function round2(v: number) { return Math.round(v * 100) / 100; }
+export function round2(v: number) { return Math.round(v * 100) / 100; }
 function round4(v: number) { return Math.round(v * 10000) / 10000; }
 
 /**
@@ -100,7 +100,7 @@ export function computeMetrics(fillRows: any[], serviceRows: any[] = [], expense
   const all_odometers = fills.map(f => f.odometer).filter(o => o != null);
   const odometer_start = all_odometers.length ? Math.min(...all_odometers) : null;
   const odometer_end = all_odometers.length ? Math.max(...all_odometers) : null;
-  const total_miles = (odometer_end && odometer_start) ? (odometer_end - odometer_start) : 0;
+  const total_miles = (odometer_end !== null && odometer_start !== null) ? (odometer_end - odometer_start) : 0;
 
   const summary = {
     total_fills: fills.length,
