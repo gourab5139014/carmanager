@@ -201,10 +201,20 @@ async function toJpegBase64(file: File): Promise<string> {
   }
 
   // 2. Downscale via Canvas to 1024px max
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(blob);
     
+    // Safety check: Can we actually read this blob URL? (Catches CSP issues)
+    try {
+      const check = await fetch(url);
+      if (!check.ok) throw new Error(\`Blob URL inaccessible: \${check.status}\`);
+      console.log('[IMAGE-PROC] Blob URL verified accessible');
+    } catch (e: any) {
+      URL.revokeObjectURL(url);
+      return reject(new Error(\`Browser blocked access to the image blob: \${e.message}\`));
+    }
+
     img.onload = () => {
       console.log(\`[IMAGE-PROC] Image loaded into memory: \${img.width}x\${img.height}\`);
       const canvas = document.createElement('canvas');
