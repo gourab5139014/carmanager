@@ -1,4 +1,5 @@
 import { api } from '../api';
+import heic2any from 'heic2any';
 
 export async function renderLogFill(app: HTMLElement, onBack: () => void) {
   const activeVehicleId = localStorage.getItem('active_vehicle_id');
@@ -83,21 +84,14 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
     statusText.textContent = msg;
   };
 
-  captureOdo.addEventListener('click', () => { currentType = 'odometer'; fileInput.click(); });
-  capturePump.addEventListener('click', () => { currentType = 'pump'; fileInput.click(); });
-
-  fileInput.addEventListener('change', async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file || !currentType) return;
-
-    showStatus(`Reading ${currentType} image...`);
-    
+  const processFile = async (file: File, type: 'odometer' | 'pump') => {
+    showStatus(`Reading ${type} image...`);
     try {
-      const base64 = await toBase64(file);
+      const base64 = await toJpegBase64(file);
       const result = await api.runOcr({
-        image: base64.split(',')[1],
-        mediaType: file.type,
-        type: currentType
+        image: base64, // Already stripped of prefix by toJpegBase64
+        mediaType: 'image/jpeg',
+        type
       });
 
       if (result.error) throw new Error(result.error);
@@ -113,16 +107,47 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
       confirmDiv.style.display = 'block';
       statusDiv.style.display = 'none';
       
-      // Visual feedback on the capture boxes
-      const box = currentType === 'odometer' ? captureOdo : capturePump;
+      // Visual feedback
+      const box = type === 'odometer' ? captureOdo : capturePump;
       box.style.borderColor = '#4da6ff';
       box.querySelector('span:first-child')!.textContent = '✅';
 
     } catch (err: any) {
-      alert('OCR Failed: ' + err.message);
+      console.error('Processing error:', err);
+      const msg = err instanceof Error ? err.message : String(err);
+      alert('Failed to process image: ' + msg);
       statusDiv.style.display = 'none';
-      confirmDiv.style.display = 'block'; // Let user enter manually
+      confirmDiv.style.display = 'block';
     }
+  };
+
+  captureOdo.addEventListener('click', () => { currentType = 'odometer'; fileInput.click(); });
+  capturePump.addEventListener('click', () => { currentType = 'pump'; fileInput.click(); });
+
+  // Drag & Drop
+  [captureOdo, capturePump].forEach(box => {
+    const type = box.id === 'capture-odo' ? 'odometer' : 'pump';
+    box.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      box.style.borderColor = '#4da6ff';
+      box.style.background = '#252525';
+    });
+    box.addEventListener('dragleave', () => {
+      box.style.borderColor = '#333';
+      box.style.background = '#1a1a1a';
+    });
+    box.addEventListener('drop', (e) => {
+      e.preventDefault();
+      box.style.borderColor = '#333';
+      box.style.background = '#1a1a1a';
+      const file = e.dataTransfer?.files[0];
+      if (file) processFile(file, type);
+    });
+  });
+
+  fileInput.addEventListener('change', async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (file && currentType) processFile(file, currentType);
   });
 
   form.addEventListener('submit', async (e) => {
@@ -153,11 +178,71 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
   });
 }
 
-function toBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
+async function toJpegBase64(file: File): Promise<string> {
+  console.log(\`[IMAGE-PROC] Processing file: \${file.name}, type: \${file.type}, size: \${file.size} bytes\`);
+  let blob: Blob = file;
+  
+  // 1. Convert HEIC/HEIF to JPEG blob if needed
+  const isHeic = file.name.toLowerCase().endsWith('.heic') || 
+                 file.name.toLowerCase().endsWith('.heif') || 
+                 file.type === 'image/heic' || 
+                 file.type === 'image/heif';
+
+  if (isHeic) {
+    try {
+      console.log('[IMAGE-PROC] Detected HEIC/HEIF. Starting conversion via heic2any...');
+      const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
+      blob = Array.isArray(converted) ? converted[0] : converted;
+      console.log(\`[IMAGE-PROC] HEIC conversion successful. New type: \${blob.type}, size: \${blob.size}\`);
+    } catch (err) {
+      console.error('[IMAGE-PROC] HEIC conversion failed:', err);
+      throw new Error('Your browser does not support HEIC images and the conversion failed. Please try a JPEG or PNG.');
+    }
+  }
+
+  // 2. Downscale via Canvas to 1024px max
+  return new Promise(async (resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    
+    // Safety check: Can we actually read this blob URL? (Catches CSP issues)
+    try {
+      const check = await fetch(url);
+      if (!check.ok) throw new Error(\`Blob URL inaccessible: \${check.status}\`);
+      console.log('[IMAGE-PROC] Blob URL verified accessible');
+    } catch (e: any) {
+      URL.revokeObjectURL(url);
+      return reject(new Error(\`Browser blocked access to the image blob: \${e.message}\`));
+    }
+
+    img.onload = () => {
+      console.log(\`[IMAGE-PROC] Image loaded into memory: \${img.width}x\${img.height}\`);
+      const canvas = document.createElement('canvas');
+      const MAX = 1024;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const base64 = dataUrl.split(',')[1];
+      if (!base64) {
+        reject(new Error('Failed to generate base64 from canvas'));
+      } else {
+        console.log(\`[IMAGE-PROC] Canvas processing complete. Base64 length: \${base64.length}\`);
+        resolve(base64);
+      }
+    };
+
+    img.onerror = () => {
+      console.error(\`[IMAGE-PROC] Failed to load image from URL into Image object. Blob type: \${blob.type}\`);
+      URL.revokeObjectURL(url);
+      reject(new Error(\`Failed to load image into canvas (Format: \${blob.type})\`));
+    };
+
+    img.src = url;
   });
 }
