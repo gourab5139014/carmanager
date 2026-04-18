@@ -1,4 +1,5 @@
 import { api } from '../api';
+import heic2any from 'heic2any';
 
 export async function renderLogFill(app: HTMLElement, onBack: () => void) {
   const activeVehicleId = localStorage.getItem('active_vehicle_id');
@@ -86,10 +87,10 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
   const processFile = async (file: File, type: 'odometer' | 'pump') => {
     showStatus(`Reading ${type} image...`);
     try {
-      const base64 = await toBase64(file);
+      const base64 = await toJpegBase64(file);
       const result = await api.runOcr({
-        image: base64.split(',')[1],
-        mediaType: file.type,
+        image: base64, // Already stripped of prefix by toJpegBase64
+        mediaType: 'image/jpeg',
         type
       });
 
@@ -175,11 +176,45 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
   });
 }
 
-function toBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
+function toJpegBase64(file: File): Promise<string> {
+  return new Promise(async (resolve, reject) => {
+    let blob: Blob = file;
+    
+    // 1. Convert HEIC/HEIF to JPEG blob if needed
+    const isHeic = file.name.toLowerCase().endsWith('.heic') || 
+                   file.name.toLowerCase().endsWith('.heif') || 
+                   file.type === 'image/heic' || 
+                   file.type === 'image/heif';
+
+    if (isHeic) {
+      try {
+        console.log('Converting HEIC to JPEG...');
+        const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
+        blob = Array.isArray(converted) ? converted[0] : converted;
+      } catch (err) {
+        console.error('HEIC conversion failed:', err);
+      }
+    }
+
+    // 2. Downscale via Canvas to 1024px max (Anthropic limit/optimization)
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const MAX = 1024;
+      const scale = Math.min(1, MAX / Math.max(img.width, img.height));
+      canvas.width  = Math.round(img.width  * scale);
+      canvas.height = Math.round(img.height * scale);
+      
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      
+      // Return raw base64 (Anthropic expects no data:image/jpeg;base64, prefix)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      resolve(dataUrl.split(',')[1]);
+    };
+    img.onerror = reject;
+    img.src = url;
   });
 }

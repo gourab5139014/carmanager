@@ -10,7 +10,8 @@
     "test": "tsx ../tests/test_metrics.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.42.0"
+    "@supabase/supabase-js": "^2.42.0",
+    "heic2any": "^0.0.4"
   },
   "devDependencies": {
     "tsx": "^4.21.0",
