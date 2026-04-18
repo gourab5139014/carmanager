@@ -179,6 +179,7 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
 }
 
 async function toJpegBase64(file: File): Promise<string> {
+  console.log(\`[IMAGE-PROC] Processing file: \${file.name}, type: \${file.type}, size: \${file.size} bytes\`);
   let blob: Blob = file;
   
   // 1. Convert HEIC/HEIF to JPEG blob if needed
@@ -189,11 +190,13 @@ async function toJpegBase64(file: File): Promise<string> {
 
   if (isHeic) {
     try {
-      console.log('Converting HEIC to JPEG...');
+      console.log('[IMAGE-PROC] Detected HEIC/HEIF. Starting conversion via heic2any...');
       const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
       blob = Array.isArray(converted) ? converted[0] : converted;
+      console.log(\`[IMAGE-PROC] HEIC conversion successful. New type: \${blob.type}, size: \${blob.size}\`);
     } catch (err) {
-      console.error('HEIC conversion failed:', err);
+      console.error('[IMAGE-PROC] HEIC conversion failed:', err);
+      throw new Error('Your browser does not support HEIC images and the conversion failed. Please try a JPEG or PNG.');
     }
   }
 
@@ -201,7 +204,9 @@ async function toJpegBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(blob);
+    
     img.onload = () => {
+      console.log(\`[IMAGE-PROC] Image loaded into memory: \${img.width}x\${img.height}\`);
       const canvas = document.createElement('canvas');
       const MAX = 1024;
       const scale = Math.min(1, MAX / Math.max(img.width, img.height));
@@ -217,13 +222,17 @@ async function toJpegBase64(file: File): Promise<string> {
       if (!base64) {
         reject(new Error('Failed to generate base64 from canvas'));
       } else {
+        console.log(\`[IMAGE-PROC] Canvas processing complete. Base64 length: \${base64.length}\`);
         resolve(base64);
       }
     };
+
     img.onerror = () => {
+      console.error(\`[IMAGE-PROC] Failed to load image from URL into Image object. Blob type: \${blob.type}\`);
       URL.revokeObjectURL(url);
-      reject(new Error('Failed to load image into canvas'));
+      reject(new Error(\`Failed to load image into canvas (Format: \${blob.type})\`));
     };
+
     img.src = url;
   });
 }
