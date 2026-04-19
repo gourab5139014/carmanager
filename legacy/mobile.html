@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Log Fill-up</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase-config.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f0f0f; color: #e0e0e0;
+    min-height: 100vh; padding: 0 0 40px;
+  }
+  header {
+    padding: 20px 20px 14px;
+    border-bottom: 1px solid #222;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  header h1 { font-size: 1.1rem; font-weight: 600; color: #fff; }
+  .back { font-size: 0.8rem; color: #4da6ff; text-decoration: none; }
+  #btn-logout {
+    background: none; border: 1px solid #333; color: #888;
+    font-size: 0.75rem; padding: 4px 10px; border-radius: 4px; cursor: pointer;
+  }
+  #btn-logout:hover { border-color: #555; color: #ccc; }
+
+  /* ── Auth screen ─────────────────────────────────────────────────── */
+  #auth-screen { padding: 40px 20px; max-width: 360px; margin: 0 auto; }
+  #auth-screen h2 { font-size: 1rem; color: #aaa; margin-bottom: 24px; }
+
+  /* ── Form ────────────────────────────────────────────────────────── */
+  form { padding: 20px; max-width: 480px; }
+  .field { margin-bottom: 18px; }
+  label { display: block; font-size: 0.75rem; color: #888; text-transform: uppercase;
+          letter-spacing: 0.05em; margin-bottom: 6px; }
+  input, select, textarea {
+    width: 100%; background: #1a1a1a; border: 1px solid #2a2a2a;
+    color: #e0e0e0; border-radius: 6px; padding: 12px 14px;
+    font-size: 1rem; font-family: inherit;
+    -webkit-appearance: none; appearance: none;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: #4da6ff;
+  }
+  input[type="checkbox"] {
+    width: auto; margin-right: 8px; accent-color: #4da6ff;
+  }
+  .checkbox-row { display: flex; align-items: center; }
+  .checkbox-row label { margin: 0; text-transform: none; font-size: 0.9rem; color: #ccc; letter-spacing: 0; }
+  .computed { color: #4da6ff; }
+  textarea { resize: vertical; min-height: 60px; }
+
+  /* ── Submit button ───────────────────────────────────────────────── */
+  #btn-submit {
+    width: 100%; padding: 15px;
+    background: #4da6ff; border: none; border-radius: 8px;
+    color: #000; font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: background 0.15s;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+  }
+  #btn-submit:hover:not(:disabled) { background: #70b8ff; }
+  #btn-submit:disabled { background: #1a3a5c; color: #4d7a9e; cursor: not-allowed; }
+
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid #4d7a9e;
+    border-top-color: #4da6ff; border-radius: 50%;
+    animation: spin 0.7s linear infinite; display: none;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Banners ─────────────────────────────────────────────────────── */
+  .banner {
+    margin: 0 20px 16px; padding: 14px 16px; border-radius: 8px;
+    font-size: 0.9rem; display: none;
+  }
+  .banner.success { background: #0d2e1a; border: 1px solid #1a6b33; color: #4caf6e; }
+  .banner.error   { background: #2e0d0d; border: 1px solid #6b1a1a; color: #cf6679; }
+  .banner.info    { background: #0d1e2e; border: 1px solid #1a4a6b; color: #6aacdf; }
+
+  /* ── Loading / config-error screens ─────────────────────────────── */
+  #init-loading, #config-error {
+    padding: 80px 20px; text-align: center; color: #666; font-size: 0.9rem;
+  }
+  #config-error { color: #cf6679; }
+  #config-error code {
+    display: block; margin-top: 12px; padding: 12px;
+    background: #1a1a1a; border-radius: 6px; font-size: 0.8rem;
+    color: #e0e0e0; text-align: left; white-space: pre-wrap;
+  }
+</style>
+</head>
+<body>
+
+<div id="init-loading">Initialising...</div>
+<div id="config-error" style="display:none"></div>
+
+<div id="main-ui" style="display:none">
+
+  <!-- Auth screen (shown when not logged in) -->
+  <div id="auth-screen" style="display:none">
+    <header><h1>Car Analytics</h1></header>
+    <div style="padding:40px 20px;max-width:360px;margin:0 auto">
+      <h2>Sign in to log a fill-up</h2>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="auth-email" autocomplete="email" inputmode="email">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="auth-password" autocomplete="current-password">
+      </div>
+      <div class="banner error" id="auth-error"></div>
+      <button id="btn-login" class="btn-submit" style="width:100%;padding:15px;background:#4da6ff;border:none;border-radius:8px;color:#000;font-size:1rem;font-weight:600;cursor:pointer;">
+        Sign In
+      </button>
+    </div>
+  </div>
+
+  <!-- Logged-in UI -->
+  <div id="log-screen" style="display:none">
+    <header>
+      <a class="back" href="index.html">← Dashboard</a>
+      <h1>Log Fill-up</h1>
+      <button id="btn-logout">Sign out</button>
+    </header>
+
+    <!-- Status banners (shown above the form) -->
+    <div class="banner success" id="banner-success"></div>
+    <div class="banner error"   id="banner-error"></div>
+    <div class="banner info"    id="banner-info"></div>
+
+    <form id="log-form" novalidate>
+      <div class="field">
+        <label>Date</label>
+        <input type="date" id="f-date" required>
+      </div>
+
+      <div class="field">
+        <label>Odometer (miles)</label>
+        <input type="number" id="f-odometer" inputmode="numeric" min="0" step="1"
+               placeholder="e.g. 220700" required>
+      </div>
+
+      <div class="field">
+        <label>Fuel Type</label>
+        <select id="f-fuel-type">
+          <option value="Gasoline">Gasoline</option>
+          <option value="Gas Premium">Gas Premium</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Volume (gallons)</label>
+        <input type="number" id="f-volume" inputmode="decimal" min="0" step="0.001"
+               placeholder="e.g. 10.250" required>
+      </div>
+
+      <div class="field">
+        <label>Price per gallon ($)</label>
+        <input type="number" id="f-price" inputmode="decimal" min="0" step="0.001"
+               placeholder="e.g. 3.899">
+      </div>
+
+      <div class="field">
+        <label>Total cost ($) <span class="computed" id="computed-label"></span></label>
+        <input type="number" id="f-total" inputmode="decimal" min="0" step="0.01"
+               placeholder="e.g. 39.95" required>
+      </div>
+
+      <div class="field">
+        <label>Distance since last fill (miles)</label>
+        <input type="number" id="f-distance" inputmode="decimal" min="0" step="0.1"
+               placeholder="optional — leave blank if unknown">
+      </div>
+
+      <div class="field">
+        <div class="checkbox-row">
+          <input type="checkbox" id="f-full-tank" checked>
+          <label for="f-full-tank">Full tank</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Notes (optional)</label>
+        <textarea id="f-notes" placeholder="e.g. filled at Shell on Main St"></textarea>
+      </div>
+
+      <button type="submit" id="btn-submit">
+        <div class="spinner" id="spinner"></div>
+        <span id="btn-label">Log Fill-up</span>
+      </button>
+    </form>
+  </div>
+
+</div><!-- #main-ui -->
+
+<script>
+// ── Supabase client setup ─────────────────────────────────────────────────────
+(function () {
+  // Validate config (catches un-edited placeholders)
+  const configOk =
+    typeof SUPABASE_URL      === 'string' && SUPABASE_URL.startsWith('https://') &&
+    typeof SUPABASE_ANON_KEY === 'string' && SUPABASE_ANON_KEY.length > 20;
+
+  if (!configOk) {
+    document.getElementById('init-loading').style.display = 'none';
+    const el = document.getElementById('config-error');
+    el.style.display = 'block';
+    el.innerHTML = `
+      <strong>Supabase not configured.</strong><br>
+      Copy <code>supabase-config.template.js</code> to <code>supabase-config.js</code>
+      and fill in your project URL and anon key.<br>
+      <code>SUPABASE_URL      = '${SUPABASE_URL}'\nSUPABASE_ANON_KEY = '${SUPABASE_ANON_KEY.slice(0, 8)}...'</code>
+    `;
+    return;
+  }
+
+  const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ── DOM refs ────────────────────────────────────────────────────────────────
+  const $ = id => document.getElementById(id);
+  const initLoading   = $('init-loading');
+  const mainUi        = $('main-ui');
+  const authScreen    = $('auth-screen');
+  const logScreen     = $('log-screen');
+  const bannerSuccess = $('banner-success');
+  const bannerError   = $('banner-error');
+  const bannerInfo    = $('banner-info');
+  const btnSubmit     = $('btn-submit');
+  const btnLabel      = $('btn-label');
+  const spinner       = $('spinner');
+  const form          = $('log-form');
+
+  // ── Helpers ─────────────────────────────────────────────────────────────────
+  function showBanner(type, msg) {
+    [bannerSuccess, bannerError, bannerInfo].forEach(b => {
+      b.style.display = 'none';
+      b.textContent = '';
+    });
+    if (type && msg) {
+      const el = type === 'success' ? bannerSuccess : type === 'error' ? bannerError : bannerInfo;
+      el.textContent = msg;
+      el.style.display = 'block';
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  let wakeTimer = null;
+
+  function setSubmitting(active) {
+    btnSubmit.disabled = active;
+    spinner.style.display = active ? 'block' : 'none';
+    btnLabel.textContent  = active ? 'Saving...' : 'Log Fill-up';
+    if (active) {
+      // Show "waking up" message if Supabase is cold and takes >3s
+      wakeTimer = setTimeout(() => {
+        showBanner('info', 'Database is waking up (~30s on free tier)… please wait.');
+      }, 3000);
+    } else {
+      clearTimeout(wakeTimer);
+    }
+  }
+
+  // ── Default date to today ────────────────────────────────────────────────────
+  const today = new Date();
+  $('f-date').value = today.toISOString().slice(0, 10);
+
+  // ── Auto-compute total cost from volume × price ──────────────────────────────
+  function recomputeTotal() {
+    const vol   = parseFloat($('f-volume').value);
+    const price = parseFloat($('f-price').value);
+    if (!isNaN(vol) && !isNaN(price) && vol > 0 && price > 0) {
+      const computed = (vol * price).toFixed(2);
+      // Only fill in if user hasn't manually edited total
+      if (!$('f-total').dataset.manuallyEdited) {
+        $('f-total').value = computed;
+        $('computed-label').textContent = '(auto)';
+      }
+    } else {
+      $('computed-label').textContent = '';
+    }
+  }
+  $('f-volume').addEventListener('input', recomputeTotal);
+  $('f-price').addEventListener('input',  recomputeTotal);
+  $('f-total').addEventListener('input',  () => {
+    $('f-total').dataset.manuallyEdited = 'true';
+    $('computed-label').textContent = '(manual)';
+  });
+
+  // ── Auth state management ────────────────────────────────────────────────────
+  sb.auth.onAuthStateChange((event, session) => {
+    initLoading.style.display = 'none';
+    mainUi.style.display      = 'block';
+    if (session) {
+      authScreen.style.display = 'none';
+      logScreen.style.display  = 'block';
+    } else {
+      authScreen.style.display = 'block';
+      logScreen.style.display  = 'none';
+    }
+  });
+
+  // ── Login ────────────────────────────────────────────────────────────────────
+  $('btn-login').addEventListener('click', async () => {
+    const email    = $('auth-email').value.trim();
+    const password = $('auth-password').value;
+    $('auth-error').style.display = 'none';
+    $('btn-login').disabled = true;
+    $('btn-login').textContent = 'Signing in...';
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    $('btn-login').disabled = false;
+    $('btn-login').textContent = 'Sign In';
+    if (error) {
+      $('auth-error').textContent = error.message;
+      $('auth-error').style.display = 'block';
+    }
+  });
+  $('auth-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('btn-login').click();
+  });
+
+  // ── Logout ───────────────────────────────────────────────────────────────────
+  $('btn-logout').addEventListener('click', () => sb.auth.signOut());
+
+  // ── Form submit ──────────────────────────────────────────────────────────────
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    showBanner(null, null);
+
+    const date      = $('f-date').value;
+    const odometer  = parseInt($('f-odometer').value, 10);
+    const fuelType  = $('f-fuel-type').value;
+    const volume    = parseFloat($('f-volume').value);
+    const price     = parseFloat($('f-price').value)  || null;
+    const total     = parseFloat($('f-total').value);
+    const distance  = parseFloat($('f-distance').value) || null;
+    const fullTank  = $('f-full-tank').checked;
+    const notes     = $('f-notes').value.trim() || null;
+
+    // Client-side validation
+    if (!date)                     { showBanner('error', 'Date is required.');               return; }
+    if (!odometer || isNaN(odometer)) { showBanner('error', 'Odometer reading is required.'); return; }
+    if (!volume   || isNaN(volume))   { showBanner('error', 'Volume (gallons) is required.'); return; }
+    if (!total    || isNaN(total))    { showBanner('error', 'Total cost is required.');        return; }
+
+    setSubmitting(true);
+
+    const { error } = await sb.schema('legacy').from('refuelings').insert({
+      date, odometer, fuel_type: fuelType, volume_gal: volume,
+      price_per_gal: price, total_cost: total, distance_mi: distance,
+      full_tank: fullTank, notes,
+    });
+
+    setSubmitting(false);
+
+    if (error) {
+      showBanner('error', `Error: ${error.message}`);
+      return;
+    }
+
+    // Success: show confirmation and reset form
+    const fillSummary = `${date} · ${odometer.toLocaleString()} mi · ${volume} gal · $${total.toFixed(2)}`;
+    showBanner('success', `Logged! ${fillSummary}`);
+    form.reset();
+    $('f-date').value = today.toISOString().slice(0, 10);
+    delete $('f-total').dataset.manuallyEdited;
+    $('computed-label').textContent = '';
+  });
+
+}());
+</script>
+</body>
+</html>

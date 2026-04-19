@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-migrate.py — one-time import of drivvo_ada_export.json into Supabase.
+migrate.py — import of drivvo_ada_export.json into Supabase.
 
 Usage:
     export SUPABASE_URL=https://xxxx.supabase.co
     export SUPABASE_SERVICE_KEY=eyJ...
+    export SUPABASE_SCHEMA=legacy       # Optional, defaults to legacy
     export USER_ID=your-user-uuid
     export VEHICLE_ID=your-vehicle-uuid
     python3 migrate.py [--dry-run]
@@ -112,7 +113,7 @@ def parse_expenses(raw_expenses, user_id=None, vehicle_id=None):
     return rows
 
 
-def supabase_insert(url, service_key, table, rows, dry_run=False):
+def supabase_insert(url, service_key, table, rows, dry_run=False, schema='legacy'):
     """Bulk insert rows into a Supabase table via the REST API."""
     if not rows:
         print(f"  {table}: 0 rows, skipping")
@@ -132,20 +133,22 @@ def supabase_insert(url, service_key, table, rows, dry_run=False):
         endpoint,
         data=payload,
         headers={
-            "apikey":        service_key,
-            "Authorization": f"Bearer {service_key}",
-            "Content-Type":  "application/json",
-            "Prefer":        "return=minimal",
+            "apikey":          service_key,
+            "Authorization":   f"Bearer {service_key}",
+            "Content-Type":    "application/json",
+            "Prefer":          "return=minimal",
+            "Content-Profile": schema,
+            "Accept-Profile":  schema,
         },
         method="POST",
     )
     try:
         with urllib.request.urlopen(req) as resp:
-            print(f"  {table}: inserted {len(rows)} rows (HTTP {resp.status})")
+            print(f"  {table}: inserted {len(rows)} rows into '{schema}' schema (HTTP {resp.status})")
             return len(rows)
     except urllib.error.HTTPError as e:
         body = e.read().decode()
-        print(f"  ERROR inserting into {table}: HTTP {e.code} — {body}", file=sys.stderr)
+        print(f"  ERROR inserting into {table} (schema: {schema}): HTTP {e.code} — {body}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -154,10 +157,11 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Parse and print, do not insert")
     args = parser.parse_args()
 
-    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    service_key  = os.environ.get("SUPABASE_SERVICE_KEY", "")
-    user_id      = os.environ.get("USER_ID", "")
-    vehicle_id   = os.environ.get("VEHICLE_ID", "")
+    supabase_url    = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    service_key     = os.environ.get("SUPABASE_SERVICE_KEY", "")
+    supabase_schema = os.environ.get("SUPABASE_SCHEMA", "legacy")
+    user_id         = os.environ.get("USER_ID", "")
+    vehicle_id      = os.environ.get("VEHICLE_ID", "")
 
     if not args.dry_run:
         if not supabase_url:
@@ -187,11 +191,11 @@ def main():
     if args.dry_run:
         print("DRY RUN — no data will be inserted")
     else:
-        print(f"Inserting into {supabase_url} ...")
+        print(f"Inserting into {supabase_url} (schema: {supabase_schema}) ...")
 
-    supabase_insert(supabase_url, service_key, "refuelings", refueling_rows, args.dry_run)
-    supabase_insert(supabase_url, service_key, "services",   service_rows,   args.dry_run)
-    supabase_insert(supabase_url, service_key, "expenses",   expense_rows,   args.dry_run)
+    supabase_insert(supabase_url, service_key, "refuelings", refueling_rows, args.dry_run, supabase_schema)
+    supabase_insert(supabase_url, service_key, "services",   service_rows,   args.dry_run, supabase_schema)
+    supabase_insert(supabase_url, service_key, "expenses",   expense_rows,   args.dry_run, supabase_schema)
 
     print()
     print("Done.")
