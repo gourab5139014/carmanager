@@ -65,6 +65,7 @@ app.get('/v1/vehicles', async (c) => {
   try {
     const sb = getSupabase(c);
     const { data, error } = await sb
+      .schema('dev')
       .from('vehicles')
       .select('*')
       .order('name');
@@ -84,7 +85,7 @@ app.get('/v1/refuelings', async (c) => {
   const vehicleId = c.req.query('vehicle_id');
   try {
     const sb = getSupabase(c);
-    let query = sb.from('refuelings').select('*').order('date', { ascending: false });
+    let query = sb.schema('dev').from('refuelings').select('*').order('date', { ascending: false });
     
     if (vehicleId) {
       query = query.eq('vehicle_id', vehicleId);
@@ -150,6 +151,7 @@ app.post('/v1/refuelings', async (c) => {
 
     // 0. Verify vehicle belongs to the authenticated user (IDOR prevention)
     const { data: vehicle, error: vehicleErr } = await sb
+      .schema('dev')
       .from('vehicles')
       .select('id')
       .eq('id', vehicle_id)
@@ -159,6 +161,7 @@ app.post('/v1/refuelings', async (c) => {
     // 1. Compute distance_mi from previous fill
     let distance_mi = null;
     const { data: prevFills } = await sb
+      .schema('dev')
       .from('refuelings')
       .select('odometer')
       .eq('vehicle_id', vehicle_id)
@@ -171,7 +174,7 @@ app.post('/v1/refuelings', async (c) => {
     }
 
     // 2. Insert record
-    const { data, error } = await sb.from('refuelings').insert({
+    const { data, error } = await sb.schema('dev').from('refuelings').insert({
       date, odometer, volume_gal, price_per_gal, 
       total_cost, fuel_type, full_tank, notes, 
       vehicle_id, distance_mi
