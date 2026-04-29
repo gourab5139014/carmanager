@@ -30,6 +30,8 @@ export async function request(path: string, options: RequestInit = {}) {
 export const api = {
   getVehicles: () => request('/v1/vehicles'),
   getRefuelings: (vehicleId?: string) => request(`/v1/refuelings${vehicleId ? `?${new URLSearchParams({ vehicle_id: vehicleId })}` : ''}`),
+  getServices: (vehicleId?: string) => request(`/v1/services${vehicleId ? `?${new URLSearchParams({ vehicle_id: vehicleId })}` : ''}`),
+  getExpenses: (vehicleId?: string) => request(`/v1/expenses${vehicleId ? `?${new URLSearchParams({ vehicle_id: vehicleId })}` : ''}`),
   logRefueling: (data: any) => request('/v1/refuelings', { method: 'POST', body: JSON.stringify(data) }),
   runOcr: (data: any) => request('/v1/ocr', { method: 'POST', body: JSON.stringify(data) }),
 };

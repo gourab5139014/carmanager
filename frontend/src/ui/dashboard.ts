@@ -56,8 +56,12 @@ async function loadFills(vehicleId: string) {
   const content = document.querySelector('#dashboard-content')!;
   content.innerHTML = 'Loading data...';
   try {
-    const fillRows = await api.getRefuelings(vehicleId);
-    const data = computeMetrics(fillRows);
+    const [fillRows, serviceRows, expenseRows] = await Promise.all([
+      api.getRefuelings(vehicleId),
+      api.getServices(vehicleId),
+      api.getExpenses(vehicleId)
+    ]);
+    const data = computeMetrics(fillRows, serviceRows, expenseRows);
     const s = data.summary;
 
     content.innerHTML = `
@@ -71,7 +75,7 @@ async function loadFills(vehicleId: string) {
           <div id="stat-mpg" style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;"></div>
         </div>
         <div style="background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #2a2a2a;">
-          <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Total Fuel Cost</div>
+          <div style="font-size: 0.7rem; color: #888; text-transform: uppercase;">Total Cost</div>
           <div id="stat-cost" style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;"></div>
         </div>
         <div style="background: #1a1a1a; padding: 12px; border-radius: 8px; border: 1px solid #2a2a2a;">
@@ -79,22 +83,50 @@ async function loadFills(vehicleId: string) {
           <div id="stat-fills" style="font-size: 1.4rem; font-weight: 700; margin-top: 4px;"></div>
         </div>
       </div>
-      <div style="background: #1a1a1a; border-radius: 8px; border: 1px solid #2a2a2a; overflow: hidden;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-          <thead style="background: #222; color: #888; text-transform: uppercase; font-size: 0.7rem;">
-            <tr><th style="padding: 10px; text-align: left;">Date</th><th style="padding: 10px; text-align: left;">Odo</th><th style="padding: 10px; text-align: left;">Vol</th><th style="padding: 10px; text-align: left;">MPG</th><th style="padding: 10px; text-align: left;">Cost</th></tr>
-          </thead>
-          <tbody id="fills-tbody"></tbody>
-        </table>
+
+      <div style="margin-bottom: 24px;">
+        <h2 style="font-size: 0.9rem; color: #888; margin-bottom: 12px;">Refueling History</h2>
+        <div style="background: #1a1a1a; border-radius: 8px; border: 1px solid #2a2a2a; overflow: hidden;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+            <thead style="background: #222; color: #888; text-transform: uppercase; font-size: 0.7rem;">
+              <tr><th style="padding: 10px; text-align: left;">Date</th><th style="padding: 10px; text-align: left;">Odo</th><th style="padding: 10px; text-align: left;">Vol</th><th style="padding: 10px; text-align: left;">MPG</th><th style="padding: 10px; text-align: left;">Cost</th></tr>
+            </thead>
+            <tbody id="fills-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 24px;">
+        <h2 style="font-size: 0.9rem; color: #888; margin-bottom: 12px;">Service History</h2>
+        <div style="background: #1a1a1a; border-radius: 8px; border: 1px solid #2a2a2a; overflow: hidden;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+            <thead style="background: #222; color: #888; text-transform: uppercase; font-size: 0.7rem;">
+              <tr><th style="padding: 10px; text-align: left;">Date</th><th style="padding: 10px; text-align: left;">Description</th><th style="padding: 10px; text-align: left;">Cost</th><th style="padding: 10px; text-align: left;">Location</th></tr>
+            </thead>
+            <tbody id="services-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 24px;">
+        <h2 style="font-size: 0.9rem; color: #888; margin-bottom: 12px;">Expense History</h2>
+        <div style="background: #1a1a1a; border-radius: 8px; border: 1px solid #2a2a2a; overflow: hidden;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+            <thead style="background: #222; color: #888; text-transform: uppercase; font-size: 0.7rem;">
+              <tr><th style="padding: 10px; text-align: left;">Date</th><th style="padding: 10px; text-align: left;">Description</th><th style="padding: 10px; text-align: left;">Cost</th></tr>
+            </thead>
+            <tbody id="expenses-tbody"></tbody>
+          </table>
+        </div>
       </div>
     `;
 
     document.querySelector('#stat-miles')!.textContent = `${s.total_miles_driven.toLocaleString()} mi`;
     document.querySelector('#stat-mpg')!.textContent = s.avg_mpg ? String(s.avg_mpg) : '—';
-    document.querySelector('#stat-cost')!.textContent = `$${s.total_fuel_cost_usd.toLocaleString()}`;
+    document.querySelector('#stat-cost')!.textContent = `$${s.total_cost_usd.toLocaleString()}`;
     document.querySelector('#stat-fills')!.textContent = String(s.total_fills);
 
-    const tbody = document.querySelector('#fills-tbody')!;
+    const tbodyFills = document.querySelector('#fills-tbody')!;
     data.fills.forEach((f: any) => {
       const tr = document.createElement('tr');
       tr.style.borderTop = '1px solid #222';
@@ -110,8 +142,44 @@ async function loadFills(vehicleId: string) {
         td.textContent = String(val);
         tr.appendChild(td);
       });
-      tbody.appendChild(tr);
+      tbodyFills.appendChild(tr);
     });
+
+    const tbodyServices = document.querySelector('#services-tbody')!;
+    data.services.forEach((s: any) => {
+      const tr = document.createElement('tr');
+      tr.style.borderTop = '1px solid #222';
+      [
+        s.date,
+        s.description || '—',
+        s.cost != null ? `$${s.cost}` : '—',
+        s.location || '—',
+      ].forEach(val => {
+        const td = document.createElement('td');
+        td.style.padding = '10px';
+        td.textContent = String(val);
+        tr.appendChild(td);
+      });
+      tbodyServices.appendChild(tr);
+    });
+
+    const tbodyExpenses = document.querySelector('#expenses-tbody')!;
+    data.expenses.forEach((e: any) => {
+      const tr = document.createElement('tr');
+      tr.style.borderTop = '1px solid #222';
+      [
+        e.date,
+        e.description || '—',
+        e.cost != null ? `$${e.cost}` : '—',
+      ].forEach(val => {
+        const td = document.createElement('td');
+        td.style.padding = '10px';
+        td.textContent = String(val);
+        tr.appendChild(td);
+      });
+      tbodyExpenses.appendChild(tr);
+    });
+
   } catch (err: any) {
     content.textContent = 'Error: ' + err.message;
   }

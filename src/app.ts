@@ -7,6 +7,7 @@ import { runOcr } from './ocr-service.ts';
 /**
  * Multi-Tenant Car Manager Unified API (v2.0)
  */
+const DB_SCHEMA = 'dev';
 const app = new Hono().basePath('/ocr-image');
 
 // Middleware: Standard Logger
@@ -65,7 +66,7 @@ app.get('/v1/vehicles', async (c) => {
   try {
     const sb = getSupabase(c);
     const { data, error } = await sb
-      .schema('dev')
+      .schema(DB_SCHEMA)
       .from('vehicles')
       .select('*')
       .order('name');
@@ -86,6 +87,50 @@ app.get('/v1/refuelings', async (c) => {
   try {
     const sb = getSupabase(c);
     let query = sb.schema('dev').from('refuelings').select('*').order('date', { ascending: false });
+    
+    if (vehicleId) {
+      query = query.eq('vehicle_id', vehicleId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return c.json(data);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+});
+
+/**
+ * GET /v1/services
+ * List services, optionally filtered by vehicle_id.
+ */
+app.get('/v1/services', async (c) => {
+  const vehicleId = c.req.query('vehicle_id');
+  try {
+    const sb = getSupabase(c);
+    let query = sb.schema(DB_SCHEMA).from('services').select('*').order('date', { ascending: false });
+    
+    if (vehicleId) {
+      query = query.eq('vehicle_id', vehicleId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return c.json(data);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+});
+
+/**
+ * GET /v1/expenses
+ * List expenses, optionally filtered by vehicle_id.
+ */
+app.get('/v1/expenses', async (c) => {
+  const vehicleId = c.req.query('vehicle_id');
+  try {
+    const sb = getSupabase(c);
+    let query = sb.schema(DB_SCHEMA).from('expenses').select('*').order('date', { ascending: false });
     
     if (vehicleId) {
       query = query.eq('vehicle_id', vehicleId);
@@ -135,53 +180,101 @@ app.post('/v1/ocr', requireAuth, async (c) => {
  * POST /v1/refuelings
  * Unified log route: handles metadata, distance computation, and DB insert.
  */
+
 app.post('/v1/refuelings', async (c) => {
   try {
     const sb = getSupabase(c);
     const body = await c.req.json();
+    const items = Array.isArray(body) ? body : [body];
     
-    const { 
-      date, odometer, volume_gal, price_per_gal, 
-      total_cost, fuel_type, full_tank, notes, vehicle_id 
-    } = body;
-
-    if (!vehicle_id) throw new Error('vehicle_id is required');
-    if (odometer === undefined || odometer === null) throw new Error('odometer is required');
-    if (typeof odometer !== 'number' || odometer < 0) throw new Error('odometer must be a non-negative number');
-
-    // 0. Verify vehicle belongs to the authenticated user (IDOR prevention)
-    const { data: vehicle, error: vehicleErr } = await sb
-      .schema('dev')
-      .from('vehicles')
-      .select('id')
-      .eq('id', vehicle_id)
-      .single();
-    if (vehicleErr || !vehicle) throw new Error('vehicle not found or access denied');
-
-    // 1. Compute distance_mi from previous fill
-    let distance_mi = null;
-    const { data: prevFills } = await sb
-      .schema('dev')
-      .from('refuelings')
-      .select('odometer')
-      .eq('vehicle_id', vehicle_id)
-      .lt('odometer', odometer)
-      .order('odometer', { ascending: false })
-      .limit(1);
-
-    if (prevFills && prevFills.length > 0) {
-      distance_mi = odometer - prevFills[0].odometer;
+    // Auth check for vehicles
+    const vehicleIds = [...new Set(items.map(i => i.vehicle_id))];
+    for (const vid of vehicleIds) {
+      if (!vid) throw new Error('vehicle_id is required');
+      const { data: vehicle, error: vehicleErr } = await sb
+        .schema(DB_SCHEMA)
+        .from('vehicles')
+        .select('id')
+        .eq('id', vid)
+        .single();
+      if (vehicleErr || !vehicle) throw new Error('vehicle not found or access denied');
     }
 
-    // 2. Insert record
-    const { data, error } = await sb.schema('dev').from('refuelings').insert({
-      date, odometer, volume_gal, price_per_gal, 
-      total_cost, fuel_type, full_tank, notes, 
-      vehicle_id, distance_mi
-    }).select().single();
+    const results = [];
+    for (const item of items) {
+      const { 
+        date, odometer, volume_gal, price_per_gal, 
+        total_cost, fuel_type, full_tank, notes, vehicle_id 
+      } = item;
 
+      if (odometer === undefined || odometer === null) throw new Error('odometer is required');
+
+      let distance_mi = null;
+      const { data: prevFills } = await sb
+        .schema(DB_SCHEMA)
+        .from('refuelings')
+        .select('odometer')
+        .eq('vehicle_id', vehicle_id)
+        .lt('odometer', odometer)
+        .order('odometer', { ascending: false })
+        .limit(1);
+
+      if (prevFills && prevFills.length > 0) {
+        distance_mi = odometer - prevFills[0].odometer;
+      }
+
+      const { data, error } = await sb.schema(DB_SCHEMA).from('refuelings').insert({
+        date, odometer, volume_gal, price_per_gal, 
+        total_cost, fuel_type, full_tank, notes, 
+        vehicle_id, distance_mi
+      }).select().single();
+
+      if (error) throw error;
+      results.push(data);
+    }
+    return c.json(Array.isArray(body) ? results : results[0]);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+});
+
+app.post('/v1/services', async (c) => {
+  try {
+    const sb = getSupabase(c);
+    const body = await c.req.json();
+    const items = Array.isArray(body) ? body : [body];
+    
+    const vehicleIds = [...new Set(items.map(i => i.vehicle_id))];
+    for (const vid of vehicleIds) {
+      if (!vid) throw new Error('vehicle_id is required');
+      const { data: vehicle, error: vehicleErr } = await sb.schema(DB_SCHEMA).from('vehicles').select('id').eq('id', vid).single();
+      if (vehicleErr || !vehicle) throw new Error('vehicle not found or access denied');
+    }
+
+    const { data, error } = await sb.schema(DB_SCHEMA).from('services').insert(items).select();
     if (error) throw error;
-    return c.json(data);
+    return c.json(Array.isArray(body) ? data : data[0]);
+  } catch (err: any) {
+    return c.json({ error: err.message }, 400);
+  }
+});
+
+app.post('/v1/expenses', async (c) => {
+  try {
+    const sb = getSupabase(c);
+    const body = await c.req.json();
+    const items = Array.isArray(body) ? body : [body];
+    
+    const vehicleIds = [...new Set(items.map(i => i.vehicle_id))];
+    for (const vid of vehicleIds) {
+      if (!vid) throw new Error('vehicle_id is required');
+      const { data: vehicle, error: vehicleErr } = await sb.schema(DB_SCHEMA).from('vehicles').select('id').eq('id', vid).single();
+      if (vehicleErr || !vehicle) throw new Error('vehicle not found or access denied');
+    }
+
+    const { data, error } = await sb.schema(DB_SCHEMA).from('expenses').insert(items).select();
+    if (error) throw error;
+    return c.json(Array.isArray(body) ? data : data[0]);
   } catch (err: any) {
     return c.json({ error: err.message }, 400);
   }
