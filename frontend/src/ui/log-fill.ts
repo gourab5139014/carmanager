@@ -179,7 +179,7 @@ export async function renderLogFill(app: HTMLElement, onBack: () => void) {
 }
 
 async function toJpegBase64(file: File): Promise<string> {
-  console.log(\`[IMAGE-PROC] Processing file: \${file.name}, type: \${file.type}, size: \${file.size} bytes\`);
+  console.log(`[IMAGE-PROC] Processing file: ${file.name}, type: ${file.type}, size: ${file.size} bytes`);
   let blob: Blob = file;
   
   // 1. Convert HEIC/HEIF to JPEG blob if needed
@@ -193,7 +193,7 @@ async function toJpegBase64(file: File): Promise<string> {
       console.log('[IMAGE-PROC] Detected HEIC/HEIF. Starting conversion via heic2any...');
       const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.8 });
       blob = Array.isArray(converted) ? converted[0] : converted;
-      console.log(\`[IMAGE-PROC] HEIC conversion successful. New type: \${blob.type}, size: \${blob.size}\`);
+      console.log(`[IMAGE-PROC] HEIC conversion successful. New type: ${blob.type}, size: ${blob.size}`);
     } catch (err) {
       console.error('[IMAGE-PROC] HEIC conversion failed:', err);
       throw new Error('Your browser does not support HEIC images and the conversion failed. Please try a JPEG or PNG.');
@@ -208,15 +208,15 @@ async function toJpegBase64(file: File): Promise<string> {
     // Safety check: Can we actually read this blob URL? (Catches CSP issues)
     try {
       const check = await fetch(url);
-      if (!check.ok) throw new Error(\`Blob URL inaccessible: \${check.status}\`);
+      if (!check.ok) throw new Error(`Blob URL inaccessible: ${check.status}`);
       console.log('[IMAGE-PROC] Blob URL verified accessible');
     } catch (e: any) {
       URL.revokeObjectURL(url);
-      return reject(new Error(\`Browser blocked access to the image blob: \${e.message}\`));
+      return reject(new Error(`Browser blocked access to the image blob: ${e.message}`));
     }
 
     img.onload = () => {
-      console.log(\`[IMAGE-PROC] Image loaded into memory: \${img.width}x\${img.height}\`);
+      console.log(`[IMAGE-PROC] Image loaded into memory: ${img.width}x${img.height}`);
       const canvas = document.createElement('canvas');
       const MAX = 1024;
       const scale = Math.min(1, MAX / Math.max(img.width, img.height));
@@ -232,15 +232,15 @@ async function toJpegBase64(file: File): Promise<string> {
       if (!base64) {
         reject(new Error('Failed to generate base64 from canvas'));
       } else {
-        console.log(\`[IMAGE-PROC] Canvas processing complete. Base64 length: \${base64.length}\`);
+        console.log(`[IMAGE-PROC] Canvas processing complete. Base64 length: ${base64.length}`);
         resolve(base64);
       }
     };
 
     img.onerror = () => {
-      console.error(\`[IMAGE-PROC] Failed to load image from URL into Image object. Blob type: \${blob.type}\`);
+      console.error(`[IMAGE-PROC] Failed to load image from URL into Image object. Blob type: ${blob.type}`);
       URL.revokeObjectURL(url);
-      reject(new Error(\`Failed to load image into canvas (Format: \${blob.type})\`));
+      reject(new Error(`Failed to load image into canvas (Format: ${blob.type})`));
     };
 
     img.src = url;

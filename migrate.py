@@ -4,9 +4,8 @@ migrate.py — import of drivvo_ada_export.json into Supabase.
 
 Usage:
     export SUPABASE_URL=https://xxxx.supabase.co
-    export SUPABASE_SERVICE_KEY=eyJ...
-    export SUPABASE_SCHEMA=legacy       # Optional, defaults to legacy
-    export USER_ID=your-user-uuid
+    export SUPABASE_JWT=eyJ...        # Or use SUPABASE_ANON_KEY to trigger login
+    export USER_ID=your-user-uuid     # Optional if logging in
     export VEHICLE_ID=your-vehicle-uuid
     python3 migrate.py [--dry-run]
 """
@@ -113,8 +112,36 @@ def parse_expenses(raw_expenses, user_id=None, vehicle_id=None):
     return rows
 
 
-def supabase_insert(url, service_key, table, rows, dry_run=False, schema='legacy'):
-    """Bulk insert rows into a Supabase table via the REST API."""
+
+import getpass
+
+def login_supabase(url, anon_key):
+    """Interactively log in to get a JWT."""
+    print("Please log in to Supabase to get a JWT.")
+    email = input("Email: ")
+    password = getpass.getpass("Password: ")
+    
+    endpoint = f"{url}/auth/v1/token?grant_type=password"
+    payload = json.dumps({"email": email, "password": password}).encode()
+    req = urllib.request.Request(
+        endpoint,
+        data=payload,
+        headers={
+            "apikey": anon_key,
+            "Content-Type": "application/json"
+        },
+        method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode())
+            return data["access_token"], data["user"]["id"]
+    except urllib.error.HTTPError as e:
+        print(f"Login failed: HTTP {e.code} - {e.read().decode()}", file=sys.stderr)
+        sys.exit(1)
+
+def supabase_insert(url, jwt, table, rows, dry_run=False):
+    """Bulk insert rows into the Unified API (/v1/{table})."""
     if not rows:
         print(f"  {table}: 0 rows, skipping")
         return 0
@@ -127,52 +154,52 @@ def supabase_insert(url, service_key, table, rows, dry_run=False, schema='legacy
             print(f"    ... and {len(rows) - 3} more")
         return len(rows)
 
-    endpoint = f"{url}/rest/v1/{table}"
-    payload  = json.dumps(rows).encode()
+    api_url = os.environ.get("API_URL", f"{url}/functions/v1/ocr-image")
+    endpoint = f"{api_url}/v1/{table}"
+    
+    payload = json.dumps(rows).encode()
     req = urllib.request.Request(
         endpoint,
         data=payload,
         headers={
-            "apikey":          service_key,
-            "Authorization":   f"Bearer {service_key}",
-            "Content-Type":    "application/json",
-            "Prefer":          "return=minimal",
-            "Content-Profile": schema,
-            "Accept-Profile":  schema,
+            "Authorization": f"Bearer {jwt}",
+            "Content-Type": "application/json",
         },
         method="POST",
     )
     try:
         with urllib.request.urlopen(req) as resp:
-            print(f"  {table}: inserted {len(rows)} rows into '{schema}' schema (HTTP {resp.status})")
+            print(f"  {table}: inserted {len(rows)} rows via API (HTTP {resp.status})")
             return len(rows)
     except urllib.error.HTTPError as e:
         body = e.read().decode()
-        print(f"  ERROR inserting into {table} (schema: {schema}): HTTP {e.code} — {body}", file=sys.stderr)
+        print(f"  ERROR inserting into {table}: HTTP {e.code} — {body}", file=sys.stderr)
         sys.exit(1)
 
-
 def main():
-    parser = argparse.ArgumentParser(description="Migrate drivvo_ada_export.json to Supabase")
+    parser = argparse.ArgumentParser(description="Migrate drivvo_ada_export.json to Supabase using Unified API")
     parser.add_argument("--dry-run", action="store_true", help="Parse and print, do not insert")
     args = parser.parse_args()
 
-    supabase_url    = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    service_key     = os.environ.get("SUPABASE_SERVICE_KEY", "")
-    supabase_schema = os.environ.get("SUPABASE_SCHEMA", "legacy")
-    user_id         = os.environ.get("USER_ID", "")
-    vehicle_id      = os.environ.get("VEHICLE_ID", "")
+    supabase_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
+    supabase_anon_key = os.environ.get("SUPABASE_ANON_KEY", "")
+    supabase_jwt = os.environ.get("SUPABASE_JWT", "")
+    user_id = os.environ.get("USER_ID", "")
+    vehicle_id = os.environ.get("VEHICLE_ID", "")
 
     if not args.dry_run:
         if not supabase_url:
             print("ERROR: set SUPABASE_URL environment variable", file=sys.stderr)
             sys.exit(1)
-        if not service_key:
-            print("ERROR: set SUPABASE_SERVICE_KEY environment variable", file=sys.stderr)
-            sys.exit(1)
-        if not user_id:
-            print("ERROR: set USER_ID environment variable", file=sys.stderr)
-            sys.exit(1)
+        if not supabase_jwt:
+            if not supabase_anon_key:
+                print("ERROR: set SUPABASE_JWT or SUPABASE_ANON_KEY to login", file=sys.stderr)
+                sys.exit(1)
+            supabase_jwt, logged_in_user = login_supabase(supabase_url, supabase_anon_key)
+            if not user_id:
+                user_id = logged_in_user
+                print(f"Using logged-in user ID: {user_id}")
+        
         if not vehicle_id:
             print("ERROR: set VEHICLE_ID environment variable", file=sys.stderr)
             sys.exit(1)
@@ -191,11 +218,11 @@ def main():
     if args.dry_run:
         print("DRY RUN — no data will be inserted")
     else:
-        print(f"Inserting into {supabase_url} (schema: {supabase_schema}) ...")
+        print(f"Inserting using Unified API ...")
 
-    supabase_insert(supabase_url, service_key, "refuelings", refueling_rows, args.dry_run, supabase_schema)
-    supabase_insert(supabase_url, service_key, "services",   service_rows,   args.dry_run, supabase_schema)
-    supabase_insert(supabase_url, service_key, "expenses",   expense_rows,   args.dry_run, supabase_schema)
+    supabase_insert(supabase_url, supabase_jwt, "refuelings", refueling_rows, args.dry_run)
+    supabase_insert(supabase_url, supabase_jwt, "services",   service_rows,   args.dry_run)
+    supabase_insert(supabase_url, supabase_jwt, "expenses",   expense_rows,   args.dry_run)
 
     print()
     print("Done.")

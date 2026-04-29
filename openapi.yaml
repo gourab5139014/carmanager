@@ -1,0 +1,286 @@
+openapi: 3.0.3
+info:
+  title: Car Manager Unified API
+  description: Multi-tenant API for vehicle refueling, service, and expense tracking.
+  version: 2.0.0
+servers:
+  - url: https://{project_ref}.supabase.co/functions/v1/ocr-image
+    variables:
+      project_ref:
+        default: your-project-ref
+        description: Your Supabase project reference ID.
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                    example: 2.0.0
+
+  /v1/vehicles:
+    get:
+      summary: List vehicles
+      description: Returns all vehicles owned by the authenticated user.
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: A list of vehicles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Vehicle'
+
+  /v1/refuelings:
+    get:
+      summary: List refueling records
+      description: Returns refueling logs for the user, optionally filtered by vehicle.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: vehicle_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: A list of refuelings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Refueling'
+    post:
+      summary: Log refueling(s)
+      description: Create one or more refueling records. Handles distance computation automatically.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                $ref: '#/components/schemas/RefuelingInput'
+                type: array
+                items:
+                  $ref: '#/components/schemas/RefuelingInput'
+      responses:
+        '200':
+          description: Successfully created
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  $ref: '#/components/schemas/Refueling'
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Refueling'
+
+  /v1/services:
+    get:
+      summary: List service records
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: vehicle_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: A list of services
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Service'
+    post:
+      summary: Create service record(s)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                $ref: '#/components/schemas/ServiceInput'
+                type: array
+                items:
+                  $ref: '#/components/schemas/ServiceInput'
+      responses:
+        '200':
+          description: Successfully created
+
+  /v1/expenses:
+    get:
+      summary: List expense records
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: vehicle_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: A list of expenses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Expense'
+    post:
+      summary: Create expense record(s)
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                $ref: '#/components/schemas/ExpenseInput'
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExpenseInput'
+      responses:
+        '200':
+          description: Successfully created
+
+  /v1/ocr:
+    post:
+      summary: Perform OCR on image
+      description: Extracts odometer or pump display data using AI.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [image, type]
+              properties:
+                image:
+                  type: string
+                  description: Base64 encoded image data.
+                mediaType:
+                  type: string
+                  default: image/jpeg
+                type:
+                  type: string
+                  enum: [odometer, pump]
+      responses:
+        '200':
+          description: OCR results (fields may be null if extraction fails)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  odometer: { type: integer, nullable: true }
+                  volume_gal: { type: number, nullable: true }
+                  price_per_gal: { type: number, nullable: true }
+                  total_cost: { type: number, nullable: true }
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Vehicle:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        make: { type: string }
+        model: { type: string }
+        year: { type: integer }
+        active: { type: boolean }
+
+    Refueling:
+      allOf:
+        - $ref: '#/components/schemas/RefuelingInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            distance_mi: { type: number, nullable: true }
+
+    RefuelingInput:
+      type: object
+      required: [date, odometer, vehicle_id]
+      properties:
+        date: { type: string, format: date }
+        odometer: { type: integer }
+        volume_gal: { type: number }
+        price_per_gal: { type: number }
+        total_cost: { type: number }
+        fuel_type: { type: string }
+        full_tank: { type: boolean }
+        notes: { type: string, nullable: true }
+        vehicle_id: { type: string, format: uuid }
+
+    Service:
+      allOf:
+        - $ref: '#/components/schemas/ServiceInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+
+    ServiceInput:
+      type: object
+      required: [date, vehicle_id]
+      properties:
+        date: { type: string, format: date }
+        odometer: { type: integer, nullable: true }
+        description: { type: string }
+        cost: { type: number }
+        category: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        location: { type: string, nullable: true }
+        vehicle_id: { type: string, format: uuid }
+
+    Expense:
+      allOf:
+        - $ref: '#/components/schemas/ExpenseInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+
+    ExpenseInput:
+      type: object
+      required: [date, vehicle_id]
+      properties:
+        date: { type: string, format: date }
+        odometer: { type: integer, nullable: true }
+        description: { type: string }
+        cost: { type: number }
+        category: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+        vehicle_id: { type: string, format: uuid }
