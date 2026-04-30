@@ -44,6 +44,32 @@ paths:
                 items:
                   $ref: '#/components/schemas/Vehicle'
 
+    post:
+      summary: Create vehicle
+      description: Create a new vehicle for the authenticated user.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                make: { type: string }
+                model: { type: string }
+                year: { type: integer }
+                active: { type: boolean, default: true }
+      responses:
+        '200':
+          description: Successfully created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+
   /v1/refuelings:
     get:
       summary: List refueling records

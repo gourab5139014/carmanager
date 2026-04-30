@@ -1,3 +1,4 @@
+import { renderVehicleManager } from './VehicleManager';
 import { api } from '../api';
 import { computeMetrics } from '../metrics';
 import { logout } from '../auth';
@@ -9,6 +10,7 @@ export async function renderDashboard(app: HTMLElement) {
       <h1 style="font-size: 1.1rem; margin: 0;">Dashboard</h1>
       <div style="display: flex; gap: 12px; align-items: center;">
         <select id="vehicle-select" style="background: #1a1a1a; color: #fff; border: 1px solid #333; padding: 4px 8px; border-radius: 4px;"></select>
+        <button id="manage-vehicles-btn" style="background: none; border: 1px solid #333; color: #888; padding: 4px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">Manage Vehicles</button>
         <button id="logout-btn" style="background: none; border: 1px solid #333; color: #888; padding: 4px 12px; border-radius: 4px; font-size: 0.8rem; cursor: pointer;">Logout</button>
       </div>
     </header>
@@ -21,6 +23,7 @@ export async function renderDashboard(app: HTMLElement) {
   `;
 
   document.querySelector('#logout-btn')?.addEventListener('click', logout);
+  document.querySelector('#manage-vehicles-btn')?.addEventListener('click', () => renderVehicleManager(app, () => renderDashboard(app)));
   document.querySelector('#nav-log')?.addEventListener('click', () => renderLogFill(app, () => renderDashboard(app)));
 
   try {
