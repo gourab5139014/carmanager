@@ -40,7 +40,7 @@ deploy-dev: ## Deploy to the ocr-image-dev edge function (Testing/Preview)
 	# Set dev specific env vars
 	# supabase secrets set --env-file .env.dev (if file exists)
 	# Alternatively set them directly:
-	supabase secrets set DB_SCHEMA=dev API_BASE_PATH=/ocr-image-dev
+	supabase secrets set DB_SCHEMA=dev API_BASE_PATH=/functions/v1/ocr-image-dev
 	rm -rf supabase/functions/ocr-image-dev/dist
 	rm supabase/functions/ocr-image-dev/openapi.yaml
 
