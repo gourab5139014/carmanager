@@ -1,7 +1,5 @@
 [functions."ocr-image"]
 verify_jwt = false
-static_files = ["functions/ocr-image/dist/**", "functions/ocr-image/openapi.yaml"]
 
 [functions."ocr-image-dev"]
 verify_jwt = false
-static_files = ["functions/ocr-image-dev/dist/**", "functions/ocr-image-dev/openapi.yaml"]
