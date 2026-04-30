@@ -7,8 +7,9 @@ import { runOcr } from './ocr-service.ts';
 /**
  * Multi-Tenant Car Manager Unified API (v2.0)
  */
-const DB_SCHEMA = 'dev';
-const app = new Hono().basePath('/ocr-image');
+const DB_SCHEMA = (typeof Deno !== 'undefined' ? Deno.env.get('DB_SCHEMA') : null) || 'dev';
+const app = new Hono().basePath((typeof Deno !== 'undefined' ? Deno.env.get('API_BASE_PATH') : null) || '/ocr-image');
+
 
 // Middleware: Standard Logger
 app.use('*', logger());

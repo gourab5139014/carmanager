@@ -17,3 +17,6 @@
 - [x] Multi-Tenant Schema (Migrated in 20260415 and 20260419)
 - [x] Migrate Dashboard to Unified API
 - [x] Migrate PWA Frontend to Unified API
+- [x] Implement Unified Delivery (API + Frontend bundled in Edge Function)
+- [x] Side-by-side Environment Separation (ocr-image vs ocr-image-dev)
+

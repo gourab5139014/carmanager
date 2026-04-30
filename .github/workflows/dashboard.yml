@@ -2,18 +2,16 @@ name: Deploy Dashboard
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feat/**']
   workflow_dispatch:
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
+# Allow only one concurrent deployment
 concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  group: "deploy-${{ github.ref }}"
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  pages: write
   id-token: write
 
 jobs:
@@ -33,12 +31,15 @@ jobs:
 
       - name: Build frontend
         run: |
-          cd frontend
-          npm ci
-          npm run build
+          # If main, use default path. If feat branch, use dev path.
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            cd frontend && npm ci && npm run build
+          else
+            cd frontend && npm ci && VITE_API_BASE_PATH=/functions/v1/ocr-image-dev npm run build
+          fi
         env:
-          VITE_SUPABASE_URL: \${{ secrets.SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: \${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Upload Build Artifact
         uses: actions/upload-artifact@v4
@@ -46,3 +47,38 @@ jobs:
           name: frontend-dist
           path: dist/
 
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/feat/')
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download Build Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy Edge Function
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            # Production Deploy
+            cp -r dist supabase/functions/ocr-image/
+            cp openapi.yaml supabase/functions/ocr-image/
+            supabase functions deploy ocr-image --no-verify-jwt --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+          else
+            # Preview/Dev Deploy
+            cp -r dist supabase/functions/ocr-image-dev/
+            cp openapi.yaml supabase/functions/ocr-image-dev/
+            supabase functions deploy ocr-image-dev --no-verify-jwt --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+            # Set Dev Secrets
+            supabase secrets set DB_SCHEMA=dev API_BASE_PATH=/ocr-image-dev --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+          fi
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

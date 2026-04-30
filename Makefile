@@ -24,13 +24,26 @@ test-ocr: ## Run OCR integration tests (hits live edge function — requires net
 	pytest tests/test_ocr.py -v
 
 # ── Supabase ──────────────────────────────────────────────────────────────────
-deploy-fn: ## Deploy the ocr-image edge function to Supabase
+deploy-fn: ## Deploy the ocr-image edge function to Supabase (Production)
 	cd frontend && npm run build
 	cp -r dist supabase/functions/ocr-image/
 	cp openapi.yaml supabase/functions/ocr-image/
 	supabase functions deploy ocr-image --no-verify-jwt
 	rm -rf supabase/functions/ocr-image/dist
 	rm supabase/functions/ocr-image/openapi.yaml
+
+deploy-dev: ## Deploy to the ocr-image-dev edge function (Testing/Preview)
+	cd frontend && VITE_API_BASE_PATH=/functions/v1/ocr-image-dev npm run build
+	cp -r dist supabase/functions/ocr-image-dev/
+	cp openapi.yaml supabase/functions/ocr-image-dev/
+	supabase functions deploy ocr-image-dev --no-verify-jwt
+	# Set dev specific env vars
+	# supabase secrets set --env-file .env.dev (if file exists)
+	# Alternatively set them directly:
+	supabase secrets set DB_SCHEMA=dev API_BASE_PATH=/ocr-image-dev
+	rm -rf supabase/functions/ocr-image-dev/dist
+	rm supabase/functions/ocr-image-dev/openapi.yaml
+
 
 secrets: ## Show which secrets are set on the Supabase project
 	supabase secrets list

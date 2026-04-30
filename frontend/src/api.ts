@@ -4,9 +4,12 @@
 import { supabase } from './auth';
 
 const isLocal = import.meta.env.DEV || window.location.hostname === 'localhost';
+const defaultPath = '/functions/v1/ocr-image';
+const envPath = import.meta.env.VITE_API_BASE_PATH;
 const BASE_URL = isLocal 
-  ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-image`
-  : '/functions/v1/ocr-image';
+  ? `${import.meta.env.VITE_SUPABASE_URL}${envPath || defaultPath}`
+  : (envPath || defaultPath);
+
 
 
 export async function request(path: string, options: RequestInit = {}) {
