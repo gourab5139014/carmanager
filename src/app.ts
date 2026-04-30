@@ -13,6 +13,8 @@ const app = new Hono().basePath('/ocr-image');
 // Middleware: Standard Logger
 app.use('*', logger());
 
+
+
 // Middleware: CORS
 app.use('*', cors({
   origin: '*',
@@ -57,6 +59,49 @@ const getSupabase = (c: any) => {
 
 // Route: Health Check
 app.get('/health', (c) => c.json({ status: 'ok', version: '2.0.0' }));
+
+/**
+ * Unified Documentation Delivery
+ */
+app.get('/docs', (c) => {
+  return c.html(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <title>Car Manager API Docs</title>
+      <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui.css" />
+    </head>
+    <body>
+      <div id="swagger-ui"></div>
+      <script src="https://unpkg.com/swagger-ui-dist@5.11.0/swagger-ui-bundle.js" crossorigin></script>
+      <script>
+        window.onload = () => {
+          window.ui = SwaggerUIBundle({
+            url: './openapi.yaml',
+            dom_id: '#swagger-ui',
+          });
+        };
+      </script>
+    </body>
+    </html>
+  `);
+});
+
+app.get('/openapi.yaml', async (c) => {
+  try {
+    // Only attempt to read from filesystem if running in Deno (Supabase Edge)
+    if (typeof Deno !== 'undefined') {
+      const yaml = await Deno.readTextFile('./openapi.yaml');
+      return c.text(yaml, 200, { 'Content-Type': 'text/yaml' });
+    }
+    return c.text('OpenAPI spec delivery not supported on this runtime.', 501);
+  } catch {
+    return c.text('OpenAPI specification not found.', 404);
+  }
+});
+
 
 /**
  * GET /v1/vehicles

@@ -3,7 +3,11 @@
  */
 import { supabase } from './auth';
 
-const BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-image`;
+const isLocal = import.meta.env.DEV || window.location.hostname === 'localhost';
+const BASE_URL = isLocal 
+  ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-image`
+  : '/functions/v1/ocr-image';
+
 
 export async function request(path: string, options: RequestInit = {}) {
   // Always read the live session token — avoids stale JWT after Supabase background refresh

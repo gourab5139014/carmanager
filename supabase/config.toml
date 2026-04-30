@@ -1,0 +1,3 @@
+[functions.ocr-image]
+verify_jwt = false
+static_patterns = ["dist/**", "openapi.yaml"]

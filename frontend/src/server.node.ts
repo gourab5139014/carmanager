@@ -7,17 +7,19 @@ import { createClient } from '@supabase/supabase-js';
 // Re-implement the app logic or import it if possible. 
 // Since app.ts uses npm: imports, we'll create a Node-compatible version for testing.
 
-const DB_SCHEMA = 'dev';
 const app = new Hono().basePath('/ocr-image');
 
 app.use('*', logger());
 app.use('*', cors());
 
-const getSupabase = (c: any) => {
+// Mock Supabase client for testing
+const getSupabase = (_c: any) => {
   const url = process.env.SUPABASE_URL || 'http://mock';
   const anonKey = process.env.SUPABASE_ANON_KEY || 'mock';
   return createClient(url, anonKey);
 };
+
+console.log('[NODE-SERVER] Mocking Supabase with getSupabase:', getSupabase);
 
 app.get('/health', (c) => c.json({ status: 'ok' }));
 app.get('/v1/vehicles', (c) => c.json([]));

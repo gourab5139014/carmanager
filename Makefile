@@ -25,7 +25,12 @@ test-ocr: ## Run OCR integration tests (hits live edge function — requires net
 
 # ── Supabase ──────────────────────────────────────────────────────────────────
 deploy-fn: ## Deploy the ocr-image edge function to Supabase
+	cd frontend && npm run build
+	cp -r dist supabase/functions/ocr-image/
+	cp openapi.yaml supabase/functions/ocr-image/
 	supabase functions deploy ocr-image --no-verify-jwt
+	rm -rf supabase/functions/ocr-image/dist
+	rm supabase/functions/ocr-image/openapi.yaml
 
 secrets: ## Show which secrets are set on the Supabase project
 	supabase secrets list
