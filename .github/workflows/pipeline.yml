@@ -73,10 +73,10 @@ jobs:
             FUNCTION_NAME="ocr-image-dev"
           fi
           
-          supabase functions deploy $FUNCTION_NAME --no-verify-jwt --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+          supabase functions deploy $FUNCTION_NAME --no-verify-jwt --project-ref ${{ vars.SUPABASE_PROJECT_ID }}
           
           if [ "${{ github.ref }}" != "refs/heads/main" ]; then
-            supabase secrets set DB_SCHEMA=dev API_BASE_PATH=/functions/v1/ocr-image-dev --project-ref ${{ secrets.SUPABASE_PROJECT_ID }}
+            supabase secrets set DB_SCHEMA=dev API_BASE_PATH=/functions/v1/ocr-image-dev --project-ref ${{ vars.SUPABASE_PROJECT_ID }}
           fi
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -89,7 +89,7 @@ jobs:
           else
             NAME="ocr-image-dev"
           fi
-          echo "api_url=https://${{ secrets.SUPABASE_PROJECT_ID }}.supabase.co/functions/v1/$NAME" >> $GITHUB_OUTPUT
+          echo "api_url=https://${{ vars.SUPABASE_PROJECT_ID }}.supabase.co/functions/v1/$NAME" >> $GITHUB_OUTPUT
 
   deploy-frontend:
     name: Deploy Frontend (Vercel)
