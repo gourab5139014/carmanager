@@ -54,7 +54,7 @@ jobs:
   deploy-backend:
     name: Deploy Backend (Supabase)
     needs: verify
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/feat/'))
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/feat/'))
     runs-on: ubuntu-latest
     outputs:
       api_url: ${{ steps.construct_url.outputs.api_url }}
