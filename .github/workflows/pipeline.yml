@@ -1,0 +1,131 @@
+name: Unified Pipeline
+
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: "deploy-${{ github.ref }}"
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  verify:
+    name: Verify (Tests)
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          cd frontend && npm ci
+          python -m pip install --upgrade pip
+          python -m pip install PyYAML
+
+      - name: Run JS tests
+        run: make test-js
+
+      - name: Run API contract tests
+        run: make test-contract
+
+      - name: Run Python tests
+        run: make test-py
+
+  deploy-backend:
+    name: Deploy Backend (Supabase)
+    needs: verify
+    # Trigger on push to main/feat OR on any PR
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      api_url: ${{ steps.construct_url.outputs.api_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy Edge Function
+        run: |
+          # Use production settings ONLY for push to main. Everything else is Dev.
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            FUNCTION_NAME="ocr-image"
+          else
+            FUNCTION_NAME="ocr-image-dev"
+          fi
+          
+          supabase functions deploy $FUNCTION_NAME --no-verify-jwt --project-ref ${{ vars.SUPABASE_PROJECT_ID }}
+          
+          if [ "$FUNCTION_NAME" == "ocr-image-dev" ]; then
+            supabase secrets set DB_SCHEMA=dev API_BASE_PATH=/functions/v1/ocr-image-dev --project-ref ${{ vars.SUPABASE_PROJECT_ID }}
+          fi
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Construct API URL
+        id: construct_url
+        run: |
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            NAME="ocr-image"
+          else
+            NAME="ocr-image-dev"
+          fi
+          echo "api_url=https://${{ vars.SUPABASE_PROJECT_ID }}.supabase.co/functions/v1/$NAME" >> $GITHUB_OUTPUT
+
+  deploy-frontend:
+    name: Deploy Frontend (Vercel)
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Vercel Orchestration
+        run: |
+          # Set flags based on environment
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            ENV_FLAG="production"
+            PROD_FLAG="--prod"
+          else
+            ENV_FLAG="preview"
+            PROD_FLAG=""
+          fi
+
+          # 1. Pull settings
+          vercel pull --yes --environment=$ENV_FLAG --token=${{ secrets.VERCEL_TOKEN }}
+          
+          # 2. Build
+          vercel build $PROD_FLAG --token=${{ secrets.VERCEL_TOKEN }}
+          
+          # 3. Deploy
+          vercel deploy --prebuilt $PROD_FLAG --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VITE_API_URL: ${{ needs.deploy-backend.outputs.api_url }}
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
