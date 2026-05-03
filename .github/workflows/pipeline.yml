@@ -54,7 +54,8 @@ jobs:
   deploy-backend:
     name: Deploy Backend (Supabase)
     needs: verify
-    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/feat/'))
+    # Trigger on push to main/feat OR on any PR
+    if: github.event_name == 'push' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       api_url: ${{ steps.construct_url.outputs.api_url }}
@@ -68,7 +69,8 @@ jobs:
 
       - name: Deploy Edge Function
         run: |
-          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          # Use production settings ONLY for push to main. Everything else is Dev.
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
             FUNCTION_NAME="ocr-image"
           else
             FUNCTION_NAME="ocr-image-dev"
@@ -76,7 +78,7 @@ jobs:
           
           supabase functions deploy $FUNCTION_NAME --no-verify-jwt --project-ref ${{ vars.SUPABASE_PROJECT_ID }}
           
-          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+          if [ "$FUNCTION_NAME" == "ocr-image-dev" ]; then
             supabase secrets set DB_SCHEMA=dev API_BASE_PATH=/functions/v1/ocr-image-dev --project-ref ${{ vars.SUPABASE_PROJECT_ID }}
           fi
         env:
@@ -85,7 +87,7 @@ jobs:
       - name: Construct API URL
         id: construct_url
         run: |
-          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
             NAME="ocr-image"
           else
             NAME="ocr-image-dev"
@@ -104,14 +106,23 @@ jobs:
 
       - name: Vercel Orchestration
         run: |
+          # Set flags based on environment
+          if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            ENV_FLAG="production"
+            PROD_FLAG="--prod"
+          else
+            ENV_FLAG="preview"
+            PROD_FLAG=""
+          fi
+
           # 1. Pull settings
-          vercel pull --yes --environment=${{ github.ref == 'refs/heads/main' && 'production' || 'preview' }} --token=${{ secrets.VERCEL_TOKEN }}
+          vercel pull --yes --environment=$ENV_FLAG --token=${{ secrets.VERCEL_TOKEN }}
           
           # 2. Build
-          vercel build ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+          vercel build $PROD_FLAG --token=${{ secrets.VERCEL_TOKEN }}
           
           # 3. Deploy
-          vercel deploy --prebuilt ${{ github.ref == 'refs/heads/main' && '--prod' || '' }} --token=${{ secrets.VERCEL_TOKEN }}
+          vercel deploy --prebuilt $PROD_FLAG --token=${{ secrets.VERCEL_TOKEN }}
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
