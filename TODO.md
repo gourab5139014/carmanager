@@ -4,7 +4,7 @@
 
 ### [HIGH] Disable or restrict service_role key usage
 **Goal:** Eventually disable or restrict the \`service_role\` key usage in local dev environments now that \`migrate.py\` uses the Unified API.
-**Status:** Pending.
+**Status:** Done.
 
 ### [MEDIUM] Delete untracked handler.ts
 **Goal:** \`supabase/functions/ocr-image/handler.ts\` is an untracked leftover from refactor — should be deleted.

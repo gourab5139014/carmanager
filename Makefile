@@ -42,9 +42,7 @@ migrate-dry: ## Dry-run: parse drivvo_ada_export.json and print row counts
 	python3 migrate.py --dry-run
 
 migrate: ## Import drivvo_ada_export.json into Supabase (requires env vars)
-	@test -n "$(SUPABASE_SERVICE_KEY)" || (echo "ERROR: set SUPABASE_SERVICE_KEY"; exit 1)
 	SUPABASE_URL=https://cofmlyvqhxjkmyzbtrsy.supabase.co \
-	SUPABASE_SERVICE_KEY=$(SUPABASE_SERVICE_KEY) \
 	python3 migrate.py
 
 # ── Help ──────────────────────────────────────────────────────────────────────
