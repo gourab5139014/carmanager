@@ -7,13 +7,33 @@ import { runOcr } from './ocr-service.ts';
 /**
  * Multi-Tenant Car Manager Unified API (v2.0)
  */
-const DB_SCHEMA = (typeof Deno !== 'undefined' ? Deno.env.get('DB_SCHEMA') : null) || 'dev';
+const GLOBAL_DB_SCHEMA = (typeof Deno !== 'undefined' ? Deno.env.get('DB_SCHEMA') : null);
+
+/**
+ * Helper: Get DB schema from header or environment variable
+ */
+const getDbSchema = (c: any) => c.req.header('x-db-schema') || GLOBAL_DB_SCHEMA;
+
+// Startup check: if DB_SCHEMA is not set and NOT running locally, log a critical warning.
+if (!GLOBAL_DB_SCHEMA && typeof Deno !== 'undefined' && Deno.env.get('LOCAL_DEV') !== 'true') {
+  console.warn('[CRITICAL] GLOBAL_DB_SCHEMA environment variable is not set! Database queries will likely fail.');
+}
+
 const app = new Hono().basePath((typeof Deno !== 'undefined' ? Deno.env.get('API_BASE_PATH') : null) || '/functions/v1/ocr-image');
 
 
 
 // Middleware: Standard Logger
 app.use('*', logger());
+
+// Middleware: DB Schema Check
+app.use('*', async (c, next) => {
+  const schema = getDbSchema(c);
+  if (!schema && typeof Deno !== 'undefined' && Deno.env.get('LOCAL_DEV') !== 'true') {
+    return c.json({ error: 'DB_SCHEMA environment variable or x-db-schema header is not set' }, 500);
+  }
+  await next();
+});
 
 
 
@@ -110,10 +130,11 @@ app.get('/openapi.yaml', async (c) => {
  * List all vehicles owned by the authenticated user.
  */
 app.get('/v1/vehicles', async (c) => {
+  const DB_SCHEMA = getDbSchema(c);
   try {
     const sb = getSupabase(c);
     const { data, error } = await sb
-      .schema(DB_SCHEMA)
+      .schema(DB_SCHEMA!)
       .from('vehicles')
       .select('*')
       .order('name');
@@ -130,6 +151,7 @@ app.get('/v1/vehicles', async (c) => {
  * Create a new vehicle.
  */
 app.post('/v1/vehicles', async (c) => {
+  const DB_SCHEMA = getDbSchema(c);
   try {
     const sb = getSupabase(c);
     const body = await c.req.json();
@@ -142,7 +164,7 @@ app.post('/v1/vehicles', async (c) => {
     if (!name) throw new Error('Vehicle name is required');
 
     const { data, error } = await sb
-      .schema(DB_SCHEMA)
+      .schema(DB_SCHEMA!)
       .from('vehicles')
       .insert({ name, make, model, year, active: active !== undefined ? active : true })
       .select()
@@ -161,10 +183,11 @@ app.post('/v1/vehicles', async (c) => {
  * List refuelings, optionally filtered by vehicle_id.
  */
 app.get('/v1/refuelings', async (c) => {
+  const DB_SCHEMA = getDbSchema(c);
   const vehicleId = c.req.query('vehicle_id');
   try {
     const sb = getSupabase(c);
-    let query = sb.schema('dev').from('refuelings').select('*').order('date', { ascending: false });
+    let query = sb.schema(DB_SCHEMA!).from('refuelings').select('*').order('date', { ascending: false });
     
     if (vehicleId) {
       query = query.eq('vehicle_id', vehicleId);
@@ -183,10 +206,11 @@ app.get('/v1/refuelings', async (c) => {
  * List services, optionally filtered by vehicle_id.
  */
 app.get('/v1/services', async (c) => {
+  const DB_SCHEMA = getDbSchema(c);
   const vehicleId = c.req.query('vehicle_id');
   try {
     const sb = getSupabase(c);
-    let query = sb.schema(DB_SCHEMA).from('services').select('*').order('date', { ascending: false });
+    let query = sb.schema(DB_SCHEMA!).from('services').select('*').order('date', { ascending: false });
     
     if (vehicleId) {
       query = query.eq('vehicle_id', vehicleId);
@@ -205,10 +229,11 @@ app.get('/v1/services', async (c) => {
  * List expenses, optionally filtered by vehicle_id.
  */
 app.get('/v1/expenses', async (c) => {
+  const DB_SCHEMA = getDbSchema(c);
   const vehicleId = c.req.query('vehicle_id');
   try {
     const sb = getSupabase(c);
-    let query = sb.schema(DB_SCHEMA).from('expenses').select('*').order('date', { ascending: false });
+    let query = sb.schema(DB_SCHEMA!).from('expenses').select('*').order('date', { ascending: false });
     
     if (vehicleId) {
       query = query.eq('vehicle_id', vehicleId);
@@ -260,6 +285,7 @@ app.post('/v1/ocr', requireAuth, async (c) => {
  */
 
 app.post('/v1/refuelings', async (c) => {
+  const DB_SCHEMA = getDbSchema(c);
   try {
     const sb = getSupabase(c);
     const body = await c.req.json();
@@ -270,7 +296,7 @@ app.post('/v1/refuelings', async (c) => {
     for (const vid of vehicleIds) {
       if (!vid) throw new Error('vehicle_id is required');
       const { data: vehicle, error: vehicleErr } = await sb
-        .schema(DB_SCHEMA)
+        .schema(DB_SCHEMA!)
         .from('vehicles')
         .select('id')
         .eq('id', vid)
@@ -289,7 +315,7 @@ app.post('/v1/refuelings', async (c) => {
 
       let distance_mi = null;
       const { data: prevFills } = await sb
-        .schema(DB_SCHEMA)
+        .schema(DB_SCHEMA!)
         .from('refuelings')
         .select('odometer')
         .eq('vehicle_id', vehicle_id)
@@ -301,7 +327,7 @@ app.post('/v1/refuelings', async (c) => {
         distance_mi = odometer - prevFills[0].odometer;
       }
 
-      const { data, error } = await sb.schema(DB_SCHEMA).from('refuelings').insert({
+      const { data, error } = await sb.schema(DB_SCHEMA!).from('refuelings').insert({
         date, odometer, volume_gal, price_per_gal, 
         total_cost, fuel_type, full_tank, notes, 
         vehicle_id, distance_mi
@@ -317,6 +343,7 @@ app.post('/v1/refuelings', async (c) => {
 });
 
 app.post('/v1/services', async (c) => {
+  const DB_SCHEMA = getDbSchema(c);
   try {
     const sb = getSupabase(c);
     const body = await c.req.json();
@@ -325,11 +352,11 @@ app.post('/v1/services', async (c) => {
     const vehicleIds = [...new Set(items.map(i => i.vehicle_id))];
     for (const vid of vehicleIds) {
       if (!vid) throw new Error('vehicle_id is required');
-      const { data: vehicle, error: vehicleErr } = await sb.schema(DB_SCHEMA).from('vehicles').select('id').eq('id', vid).single();
+      const { data: vehicle, error: vehicleErr } = await sb.schema(DB_SCHEMA!).from('vehicles').select('id').eq('id', vid).single();
       if (vehicleErr || !vehicle) throw new Error('vehicle not found or access denied');
     }
 
-    const { data, error } = await sb.schema(DB_SCHEMA).from('services').insert(items).select();
+    const { data, error } = await sb.schema(DB_SCHEMA!).from('services').insert(items).select();
     if (error) throw error;
     return c.json(Array.isArray(body) ? data : data[0]);
   } catch (err: any) {
@@ -338,6 +365,7 @@ app.post('/v1/services', async (c) => {
 });
 
 app.post('/v1/expenses', async (c) => {
+  const DB_SCHEMA = getDbSchema(c);
   try {
     const sb = getSupabase(c);
     const body = await c.req.json();
@@ -346,11 +374,11 @@ app.post('/v1/expenses', async (c) => {
     const vehicleIds = [...new Set(items.map(i => i.vehicle_id))];
     for (const vid of vehicleIds) {
       if (!vid) throw new Error('vehicle_id is required');
-      const { data: vehicle, error: vehicleErr } = await sb.schema(DB_SCHEMA).from('vehicles').select('id').eq('id', vid).single();
+      const { data: vehicle, error: vehicleErr } = await sb.schema(DB_SCHEMA!).from('vehicles').select('id').eq('id', vid).single();
       if (vehicleErr || !vehicle) throw new Error('vehicle not found or access denied');
     }
 
-    const { data, error } = await sb.schema(DB_SCHEMA).from('expenses').insert(items).select();
+    const { data, error } = await sb.schema(DB_SCHEMA!).from('expenses').insert(items).select();
     if (error) throw error;
     return c.json(Array.isArray(body) ? data : data[0]);
   } catch (err: any) {

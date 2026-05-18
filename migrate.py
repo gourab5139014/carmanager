@@ -140,7 +140,7 @@ def login_supabase(url, anon_key):
         print(f"Login failed: HTTP {e.code} - {e.read().decode()}", file=sys.stderr)
         sys.exit(1)
 
-def supabase_insert(url, jwt, table, rows, dry_run=False):
+def supabase_insert(url, jwt, table, rows, dry_run=False, schema=None):
     """Bulk insert rows into the Unified API (/v1/{table})."""
     if not rows:
         print(f"  {table}: 0 rows, skipping")
@@ -154,17 +154,22 @@ def supabase_insert(url, jwt, table, rows, dry_run=False):
             print(f"    ... and {len(rows) - 3} more")
         return len(rows)
 
+    target_schema = schema or os.environ.get("DB_SCHEMA")
     api_url = os.environ.get("API_URL", f"{url}/functions/v1/ocr-image")
     endpoint = f"{api_url}/v1/{table}"
     
     payload = json.dumps(rows).encode()
+    headers = {
+        "Authorization": f"Bearer {jwt}",
+        "Content-Type": "application/json",
+    }
+    if target_schema:
+        headers["x-db-schema"] = target_schema
+
     req = urllib.request.Request(
         endpoint,
         data=payload,
-        headers={
-            "Authorization": f"Bearer {jwt}",
-            "Content-Type": "application/json",
-        },
+        headers=headers,
         method="POST",
     )
     try:
@@ -215,14 +220,15 @@ def main():
     print(f"Parsed: {len(refueling_rows)} refuelings, {len(service_rows)} services, {len(expense_rows)} expenses")
     print()
 
+    db_schema = os.environ.get("DB_SCHEMA")
     if args.dry_run:
         print("DRY RUN — no data will be inserted")
     else:
-        print(f"Inserting using Unified API ...")
+        print(f"Inserting into schema '{db_schema or 'default'}' using Unified API ...")
 
-    supabase_insert(supabase_url, supabase_jwt, "refuelings", refueling_rows, args.dry_run)
-    supabase_insert(supabase_url, supabase_jwt, "services",   service_rows,   args.dry_run)
-    supabase_insert(supabase_url, supabase_jwt, "expenses",   expense_rows,   args.dry_run)
+    supabase_insert(supabase_url, supabase_jwt, "refuelings", refueling_rows, args.dry_run, schema=db_schema)
+    supabase_insert(supabase_url, supabase_jwt, "services",   service_rows,   args.dry_run, schema=db_schema)
+    supabase_insert(supabase_url, supabase_jwt, "expenses",   expense_rows,   args.dry_run, schema=db_schema)
 
     print()
     print("Done.")
