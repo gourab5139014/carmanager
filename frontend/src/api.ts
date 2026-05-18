@@ -3,9 +3,18 @@
  */
 import { supabase } from './auth';
 
-const BASE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ocr-image`;
+const API_URL = import.meta.env.VITE_API_URL;
+
+if (!API_URL && !import.meta.env.DEV) {
+  console.warn('VITE_API_URL is missing. API calls will likely fail.');
+}
+
+// In development mode, default to the local Supabase edge function proxy if no URL is provided
+const BASE_URL = API_URL || 'http://localhost:54321/functions/v1/ocr-image';
+
 
 export async function request(path: string, options: RequestInit = {}) {
+
   // Always read the live session token — avoids stale JWT after Supabase background refresh
   const { data: { session } } = await supabase.auth.getSession();
   const headers = new Headers(options.headers || {});

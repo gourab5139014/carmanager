@@ -4,7 +4,7 @@
 
 ### [HIGH] Disable or restrict service_role key usage
 **Goal:** Eventually disable or restrict the \`service_role\` key usage in local dev environments now that \`migrate.py\` uses the Unified API.
-**Status:** Pending.
+**Status:** Done.
 
 ### [MEDIUM] Delete untracked handler.ts
 **Goal:** \`supabase/functions/ocr-image/handler.ts\` is an untracked leftover from refactor — should be deleted.
@@ -17,3 +17,6 @@
 - [x] Multi-Tenant Schema (Migrated in 20260415 and 20260419)
 - [x] Migrate Dashboard to Unified API
 - [x] Migrate PWA Frontend to Unified API
+- [x] Implement Unified Delivery (API + Frontend bundled in Edge Function)
+- [x] Side-by-side Environment Separation (ocr-image vs ocr-image-dev)
+

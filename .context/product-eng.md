@@ -72,3 +72,8 @@ v2.0 is live on `feat/unified-api-completion`. Core loop is centralized:
 - `select('*')` in some queries could be optimized for specific column lists.
 - `tests/test_ocr.py` requires local fixtures for integration testing.
 - `supabase-config.js` injection logic remains brittle for complex secrets.
+## Car Manager Assumptions
+- The database currently tracks a single vehicle: **Primary Lexus** (`e86fb69c-a00a-4480-bed1-aa218ca348d7`).
+- If a `vehicle_id` is missing during data entry, it must default to this ID.
+- **Source of Truth:** The `legacy` schema is the primary source of truth, populated manually.
+- The `dev` schema should be kept synchronized with `legacy` for ongoing development.

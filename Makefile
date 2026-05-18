@@ -24,8 +24,15 @@ test-ocr: ## Run OCR integration tests (hits live edge function — requires net
 	pytest tests/test_ocr.py -v
 
 # ── Supabase ──────────────────────────────────────────────────────────────────
-deploy-fn: ## Deploy the ocr-image edge function to Supabase
+deploy-fn: ## Deploy the ocr-image edge function to Supabase (Production)
 	supabase functions deploy ocr-image --no-verify-jwt
+
+deploy-dev: ## Deploy to the ocr-image-dev edge function (Testing/Preview)
+	supabase functions deploy ocr-image-dev --no-verify-jwt
+	# Set dev specific env vars
+	supabase secrets set DB_SCHEMA=dev API_BASE_PATH=/functions/v1/ocr-image-dev
+
+
 
 secrets: ## Show which secrets are set on the Supabase project
 	supabase secrets list
@@ -35,9 +42,7 @@ migrate-dry: ## Dry-run: parse drivvo_ada_export.json and print row counts
 	python3 migrate.py --dry-run
 
 migrate: ## Import drivvo_ada_export.json into Supabase (requires env vars)
-	@test -n "$(SUPABASE_SERVICE_KEY)" || (echo "ERROR: set SUPABASE_SERVICE_KEY"; exit 1)
 	SUPABASE_URL=https://cofmlyvqhxjkmyzbtrsy.supabase.co \
-	SUPABASE_SERVICE_KEY=$(SUPABASE_SERVICE_KEY) \
 	python3 migrate.py
 
 # ── Help ──────────────────────────────────────────────────────────────────────
