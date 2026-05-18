@@ -24,7 +24,7 @@ def test_api_contract():
     print("Starting Hono server for contract testing...")
     # Using tsx to run the server. PORT environment variable is used by frontend/src/server.node.ts
     server_proc = subprocess.Popen(
-        ["npx", "tsx", "frontend/src/server.node.ts"],
+        ["npx", "--yes", "tsx", "frontend/src/server.node.ts"],
         env={**os.environ, "PORT": str(PORT), "SUPABASE_URL": "http://mock", "SUPABASE_ANON_KEY": "mock"},
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
